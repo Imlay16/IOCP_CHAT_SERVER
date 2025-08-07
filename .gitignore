@@ -1,0 +1,14 @@
+.vs/
+x64/
+Debug/
+Release/
+*.exe
+*.obj
+*.pdb
+*.vcxproj.user
+*.suo
+*.log
+*.tmp
+Thumbs.db
+.DS_Store 
+obj/ 
