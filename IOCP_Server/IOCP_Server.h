@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <iostream>
+#include "Packet.h"
 
 #define MAX_SOCKBUF 1024
 #define MAX_WORKERTHREAD 4
@@ -37,6 +38,9 @@ struct ClientSession
 {
 	UINT32 sessionId;
 	SOCKET clientSocket;
+
+	string username;
+
 	SessionState state;
 
 	OverlappedEx recvOverlappedEx;
@@ -59,7 +63,7 @@ class IOCP_SERVER
 private:
 
 	// 멤버 변수
-	UINT32 g_sessionIdCounter = 1;
+	UINT32 sessionIdCounter = 1;
 	vector<ClientSession> m_clientSessions;
 	SOCKET mListenSocket;
 	int mClientCnt;
@@ -71,7 +75,7 @@ private:
 
 	// Accept 스레드에서만 호출
 	UINT32 generateSessionId() {
-		return g_sessionIdCounter++;
+		return sessionIdCounter++;
 	}
 
 	void CreateClient(const UINT32 maxClientCount)
@@ -153,10 +157,10 @@ private:
 		return true;
 	}
 
-	bool SendMsg(ClientSession* pClientSession, char* pMsg, int nLen)
+	bool SendMsg(ClientSession* pClientSession, const char* pMsg, int nLen)
 	{
 		DWORD sendBytes;
-
+		
 		memcpy(pClientSession->sendBuf, pMsg, nLen);
 
 		pClientSession->sendOverlappedEx.operation = IOOperation::SEND;
@@ -180,6 +184,46 @@ private:
 		return true;
 	}
 
+	void UserJoinNotify(ClientSession* pClientSession)
+	{
+		string joinMsg;
+
+		joinMsg = pClientSession->username + " has joined.";
+
+		BroadCastMsg(pClientSession, joinMsg.c_str(), joinMsg.length());
+	}
+
+	void BroadCastMsg(ClientSession* pClientSession, const char* pMsg, int nLen)
+	{
+		for (auto& session : m_clientSessions)
+		{
+			if (session.clientSocket != INVALID_SOCKET && session.sessionId != pClientSession->sessionId)
+			{
+				SendMsg(&session, pMsg, nLen);
+			}
+		}
+	}
+
+	void ProcessMessage(ClientSession* pClientSession, const char* pMsg, int nLen)
+	{
+		if (pClientSession->state == SessionState::AUTHENTICATED)
+		{
+			pClientSession->username = string(pMsg, nLen);			
+			pClientSession->state = SessionState::CONNECTED;
+			UserJoinNotify(pClientSession);
+		}
+		else
+		{
+			string chatMsg = "[" + pClientSession->username + "]:" + string(pMsg, nLen);
+			BroadCastMsg(pClientSession, chatMsg.c_str(), chatMsg.length());
+		}
+	}
+
+	void ProcessPacket(ClientSession* pClientSession, PacketHeader* packet)
+	{
+
+	}
+
 	void WorkerThread()
 	{
 		DWORD bSuccess = TRUE;
@@ -201,7 +245,7 @@ private:
 				if (pClientSession && pClientSession->clientSocket != INVALID_SOCKET)
 				{
 					cout << "클라이언트 연결 종료. 세션 ID: " << pClientSession->sessionId << endl;
-					CloseSession(pClientSession);					
+					CloseSession(pClientSession);
 				}
 
 				continue;
@@ -211,23 +255,18 @@ private:
 
 			if (pOverlappedEx->operation == IOOperation::RECV)
 			{
-				// RECV
-				// 받으면 브로드캐스트!
-
-				for (auto& session : m_clientSessions)
-				{
-					if (session.clientSocket != INVALID_SOCKET) // session.sessionId != pClientSession->sessionId -> 채팅 기능일 때.
-					{
-						SendMsg(&session, pClientSession->recvBuf, dwIoSize);  // 실제 수신 데이터 크기 사용
-					}
-				}
+				ProcessMessage(pClientSession, pClientSession->recvBuf, dwIoSize);
 
 				// 다시 Recv 시작
 				BindRecv(pClientSession);
+
+				// 이제 여기에 ProcessPacket함수를 넣으면 됨. 
+				// 그리고 패킷 처리하게!
 			}
 			else if (pOverlappedEx->operation == IOOperation::SEND)
 			{
 				// SEND
+
 
 			}
 		}
@@ -257,7 +296,7 @@ private:
 
 			// 세션 ID 생성
 			pClientSession->sessionId = generateSessionId();
-			pClientSession->state = SessionState::CONNECTED;
+			pClientSession->state = SessionState::AUTHENTICATED;
 
 			bool ret = BindIOCompletionPort(pClientSession);
 			if (ret == false)
@@ -323,8 +362,6 @@ public:
 			cout << "bind() Error" << GetLastError() << endl;
 			return false;
 		}
-
-		// mIOCPHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, MAX_WORKERTHREAD);
 
 		if (listen(mListenSocket, 5) != 0)
 		{

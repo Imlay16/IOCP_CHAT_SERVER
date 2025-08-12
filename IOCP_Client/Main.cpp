@@ -3,10 +3,14 @@
 #include <string.h>
 #include <windows.h>
 #include <process.h> 
+#include <iostream>
+
+using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
 #define BUF_SIZE 100
+#define USER_NAME 32
 
 unsigned WINAPI SendMsg(void* arg);
 unsigned WINAPI RecvMsg(void* arg);
@@ -50,27 +54,38 @@ int main(int argc, char* argv[])
 unsigned WINAPI SendMsg(void* arg)   // send thread main
 {
 	SOCKET hSock = *((SOCKET*)arg);
-	while (1)
+
+	printf("Set User Name: ");
+	fgets(msg, BUF_SIZE, stdin);
+
+	msg[strlen(msg) - 1] = '\0';
+	
+	send(hSock, msg, strlen(msg), 0);
+
+	while (1) 
 	{
 		fgets(msg, BUF_SIZE, stdin);
+
 		if (!strcmp(msg, "q\n") || !strcmp(msg, "Q\n"))
 		{
 			closesocket(hSock);
 			exit(0);
 		}
+
 		send(hSock, msg, strlen(msg), 0);
 	}
+	
 	return 0;
 }
 
 unsigned WINAPI RecvMsg(void* arg)   // read thread main
 {
 	int hSock = *((SOCKET*)arg);
-	char recvMsg[BUF_SIZE];
+	char recvMsg[USER_NAME + BUF_SIZE];
 	int strLen;
 	while (1)
 	{
-		strLen = recv(hSock, recvMsg, BUF_SIZE - 1, 0);
+		strLen = recv(hSock, recvMsg, USER_NAME + BUF_SIZE - 1, 0);
 		if (strLen == -1)
 			return -1;
 		recvMsg[strLen] = 0;
