@@ -83,6 +83,8 @@ private:
 	bool mIsWorkerRun = true;
 	bool mIsAccepterRun = true;
 
+	CRITICAL_SECTION m_broadcastCS;
+
 	// Accept 스레드에서만 호출
 	UINT32 generateSessionId() {
 		return sessionIdCounter++;
@@ -139,78 +141,6 @@ private:
 		}
 	}
 
-	//bool BindRecv(ClientSession* pClientSession)
-	//{
-	//	DWORD recvBytes = 0;
-	//	DWORD flag = 0;
-
-	//	ZeroMemory(&pClientSession->recvOverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
-
-	//	pClientSession->recvOverlappedEx.operation = IOOperation::RECV;
-
-	//	// 중요! accumulatedSize 위치부터 받아야 함
-	//	pClientSession->recvOverlappedEx.wsaBuf.buf =
-	//		pClientSession->recvBuf + pClientSession->accumulatedSize;  
-	//	pClientSession->recvOverlappedEx.wsaBuf.len =
-	//		MAX_SOCKBUF - pClientSession->accumulatedSize;  
-
-	//	int ret = WSARecv(pClientSession->clientSocket,
-	//		&(pClientSession->recvOverlappedEx.wsaBuf),
-	//		1,
-	//		&recvBytes,
-	//		&flag,
-	//		(LPWSAOVERLAPPED) & (pClientSession->recvOverlappedEx),
-	//		NULL);
-
-	//	if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
-	//	{
-	//		cout << "WSARecv Error() " << WSAGetLastError() << endl;
-	//		return false;
-	//	}
-
-	//	return true;
-	//}
-
-	//bool SendPacket(ClientSession* pClientSession, PacketHeader* packet)
-	//{
-	//	DWORD sendBytes;
-
-	//	// 내 생각엔 각각 ProcessPacket에 따라서, Login은 LoginRes / BroadReq는 BroadRes 패킷을 생성한다음에 SendPacket에 매개변수로 넣어주면 될 듯?
-	//	// 근데 브로드캐스트 메세지할때는 -> BroadCastResPacket을 보내야하나?? 
-
-	//	// 
-	//	
-
-	//	switch (packet->type)
-	//	{
-	//	case PacketType::BROADCAST_REQUEST:
-	//		SendBroadCastPacket();
-	//		break;
-	//	case PacketType::LOGIN_REQUEST:
-	//		break;
-	//	case PacketType::ROOM_CHAT_REQUEST:
-	//		break;
-	//	case PacketType::ROOM_CREATE_REQUEST:
-	//		break;
-	//	case PacketType::ROOM_JOIN_REQUEST:
-	//		break;
-	//	case PacketType::ROOM_LIST_REQUEST:
-	//		break;
-	//	}
-	//}
-
-	//void SendBroadCastPacket(ClientSession* pClientSession)
-	//{
-	//	BroadCastResPacket packet;
-
-	//	packet.SetUser(pClientSession->username.c_str());
-	//	packet.SetMessage(pClientSession->recvBuf);
-
-	//	// username 및 msg 넣기
-	//	
-	//	SendPacket(pClientSession, &packet);
-	//}
-
 	void SendLoginPacket(ClientSession* pClientSession)
 	{
 
@@ -241,6 +171,8 @@ private:
 		DWORD sendBytes;
 		memcpy(pClientSession->sendBuf, (char*)packet, packet->size);
 
+		ZeroMemory(&pClientSession->sendOverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
+
 		pClientSession->sendOverlappedEx.operation = IOOperation::SEND;
 		pClientSession->sendOverlappedEx.wsaBuf.buf = pClientSession->sendBuf;
 		pClientSession->sendOverlappedEx.wsaBuf.len = packet->size;
@@ -261,60 +193,14 @@ private:
 		return true;
 	}
 
-	//bool SendMsg(ClientSession* pClientSession, const char* pMsg, int nLen)
-	//{
-	//	DWORD sendBytes;
-	//	
-	//	memcpy(pClientSession->sendBuf, pMsg, nLen);
-
-	//	pClientSession->sendOverlappedEx.operation = IOOperation::SEND;
-	//	pClientSession->sendOverlappedEx.wsaBuf.buf = pClientSession->sendBuf;
-	//	pClientSession->sendOverlappedEx.wsaBuf.len = nLen;
-
-	//	int ret = WSASend(pClientSession->clientSocket,
-	//		&(pClientSession->sendOverlappedEx.wsaBuf),
-	//		1,
-	//		&sendBytes,
-	//		0,
-	//		(LPWSAOVERLAPPED) & (pClientSession->sendOverlappedEx),
-	//		NULL);
-
-	//	if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
-	//	{
-	//		cout << "WSASend Error() " << WSAGetLastError() << endl;
-	//		return false;
-	//	}
-	//	return true;
-	//}
-
 	// 클라이언트가 로그인할 시, 보내기
 	void UserJoinNotify(ClientSession* pClientSession)
 	{
 		string joinMsg;
-
-		joinMsg = pClientSession->username + " has joined.";
-
-		
+		joinMsg = pClientSession->username + " has joined.";		
 		
 		// BroadCastMsg(pClientSession, joinMsg.c_str(), joinMsg.length());
 	}
-
-	//void BroadCastMsg(ClientSession* pClientSession, const char* pMsg, int nLen)
-	//{
-	//	BroadCastResPacket response;
-	//	response.SetMessage(pClientSession->username.c_str(), pMsg);		
-
-	//	for (auto& session : m_clientSessions)
-	//	{
-	//		if (session.clientSocket != INVALID_SOCKET)
-	//		{
-	//			if (session.sessionId == pClientSession->sessionId)
-	//				continue;
-
-	//			SendMsg(&session, pMsg, nLen);
-	//		}
-	//	}
-	//}
 
 	void NotifyUserJoin(ClientSession* pClientSession, const char* pMsg, int nLen)
 	{
@@ -341,7 +227,7 @@ private:
 			// 연결 종료 또는 에러 처리
 			return false;
 		}
-
+		
 		ZeroMemory(&pClientSession->recvOverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
 
 		pClientSession->recvOverlappedEx.operation = IOOperation::RECV;
@@ -367,6 +253,9 @@ private:
 	
 	void BroadCastPacket(ClientSession* pClientSession, PacketHeader* packet)
 	{
+		printf("[DEBUG] BroadCast called by session %d\n", pClientSession->sessionId);
+		EnterCriticalSection(&m_broadcastCS);
+
 		for (auto& session : m_clientSessions)
 		{
 			if (session.clientSocket != INVALID_SOCKET)
@@ -377,6 +266,8 @@ private:
 				SendPacket(&session, packet);
 			}
 		}
+
+		LeaveCriticalSection(&m_broadcastCS);
 	}
 
 	void HandleLogin(ClientSession* pClientSession, char* buffer, DWORD dataSize)
@@ -417,12 +308,6 @@ private:
 
 		PacketHeader* header = (PacketHeader*)pClientSession->recvBuf;
 		DWORD expectedSize = header->size;
-
-		// 여기서 계속 패킷 본문을 수신함.. 
-		// "패킷 본문 수신중..."
-		// "패킷 본문 수신중..."
-		// "패킷 본문 수신중..."
-		// Send 완료 메세지가 안떴음...
 
 		if (pClientSession->accumulatedSize < expectedSize) {
 			cout << "패킷 본문 수신중..." << endl;
@@ -737,10 +622,12 @@ public:
 	IOCP_SERVER()
 	{
 		mClientCnt = 0;          
+		InitializeCriticalSection(&m_broadcastCS);
 	}
 
 	~IOCP_SERVER()
 	{
+		DeleteCriticalSection(&m_broadcastCS);
 		WSACleanup();
 	}
 
