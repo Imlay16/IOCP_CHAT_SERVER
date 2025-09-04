@@ -1,5 +1,6 @@
 ﻿#pragma once
 #pragma comment(lib, "ws2_32")
+
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
@@ -143,7 +144,7 @@ private:
 
 	void SendLoginPacket(ClientSession* pClientSession)
 	{
-
+		
 	}
 
 	void SendRoomChatPacket(ClientSession* pClientSession)
@@ -337,113 +338,6 @@ private:
 
 		cout << "[DEBUG] Packet processing complete. Buffer reset." << endl;
 	}
-
-	//void HandleBroadCast(ClientSession* pClientSession, PacketHeader* recvPacket)
-	//{
-	//	cout << "[DEBUG] HandleBroadCast - Original packet size: "
-	//		<< recvPacket->size << endl;
-
-	//	BroadCastReqPacket* reqPacket = (BroadCastReqPacket*)recvPacket;
-	//	cout << "[DEBUG] Message: " << reqPacket->message << endl;
-
-	//	// Response 패킷 생성
-	//	BroadCastResPacket resPacket;
-	//	resPacket.SetUser(pClientSession->username.c_str());
-	//	resPacket.SetMessage(reqPacket->message);
-
-	//	cout << "[DEBUG] Response packet - Type: " << (int)resPacket.type
-	//		<< ", Size: " << resPacket.size << endl;
-
-	//	BroadCastPacket(pClientSession, (PacketHeader*)&resPacket);
-	//}
-
-	//void ProcessPacket(ClientSession* pClientSession, DWORD dataSize)
-	//{
-	//	// 디버깅 정보 추가
-	//	cout << "[DEBUG] ProcessPacket - Received: " << dataSize
-	//		<< " bytes, Accumulated: " << pClientSession->accumulatedSize
-	//		<< " -> " << (pClientSession->accumulatedSize + dataSize) << endl;
-
-	//	pClientSession->accumulatedSize += dataSize;
-
-	//	DWORD processedSize = 0;
-
-	//	while (processedSize < pClientSession->accumulatedSize)
-	//	{
-	//		DWORD remainingSize = pClientSession->accumulatedSize - processedSize;
-
-	//		// 헤더를 읽을 수 있는지 확인
-	//		if (remainingSize < sizeof(PacketHeader)) {
-	//			cout << "[DEBUG] Not enough data for header. Remaining: "
-	//				<< remainingSize << endl;
-	//			if (processedSize > 0 && remainingSize > 0) {
-	//				memmove(pClientSession->recvBuf,
-	//					pClientSession->recvBuf + processedSize,
-	//					remainingSize);
-	//			}
-	//			pClientSession->accumulatedSize = remainingSize;
-	//			return;
-	//		}
-
-	//		PacketHeader* header = (PacketHeader*)(pClientSession->recvBuf + processedSize);
-
-	//		// 디버깅: 헤더 정보 출력
-	//		cout << "[DEBUG] Packet Header - Type: " << (int)header->type
-	//			<< ", Size: " << header->size << endl;
-
-	//		// 패킷 타입 검증 추가
-	//		if ((int)header->type < 2000 || (int)header->type > 6000) {
-	//			cout << "[ERROR] Invalid packet type: " << (int)header->type << endl;
-	//			cout << "[DEBUG] Buffer dump (first 20 bytes): ";
-	//			for (int i = 0; i < min(20, (int)remainingSize); i++) {
-	//				printf("%02X ", (unsigned char)pClientSession->recvBuf[processedSize + i]);
-	//			}
-	//			cout << endl;
-
-	//			// 버퍼 초기화
-	//			pClientSession->accumulatedSize = 0;
-	//			return;
-	//		}
-
-	//		// 패킷 크기 검증
-	//		if (header->size < sizeof(PacketHeader) || header->size > MAX_SOCKBUF) {
-	//			cout << "[ERROR] Invalid packet size: " << header->size << endl;
-	//			pClientSession->accumulatedSize = 0;
-	//			return;
-	//		}
-
-	//		// 전체 패킷을 받았는지 확인
-	//		if (remainingSize < header->size) {
-	//			cout << "[DEBUG] Waiting for complete packet. Need: "
-	//				<< header->size << ", Have: " << remainingSize << endl;
-	//			if (processedSize > 0) {
-	//				memmove(pClientSession->recvBuf,
-	//					pClientSession->recvBuf + processedSize,
-	//					remainingSize);
-	//			}
-	//			pClientSession->accumulatedSize = remainingSize;
-	//			return;
-	//		}
-
-	//		// 패킷 처리
-	//		cout << "[DEBUG] Processing complete packet" << endl;
-
-	//		switch (header->type)
-	//		{
-	//		case PacketType::BROADCAST_REQUEST:
-	//			HandleBroadCast(pClientSession, header);
-	//			break;
-	//		default:
-	//			cout << "Unknown Packet Type: " << (int)header->type << endl;
-	//			break;
-	//		}
-
-	//		processedSize += header->size;
-	//	}
-
-	//	// 모든 패킷 처리 완료
-	//	pClientSession->accumulatedSize = 0;
-	//}
 
 	void WorkerThread()
 	{
