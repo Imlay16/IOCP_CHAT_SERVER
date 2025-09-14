@@ -59,12 +59,12 @@ struct ClientSession
 		ZeroMemory(&recvOverlappedEx, sizeof(OverlappedEx));
 		ZeroMemory(&sendOverlappedEx, sizeof(OverlappedEx));		
 
-		ZeroMemory(recvBuf, sizeof(recvBuf));  // ✅ 추가
-		ZeroMemory(sendBuf, sizeof(sendBuf));  // ✅ 추가
+		ZeroMemory(recvBuf, sizeof(recvBuf));  
+		ZeroMemory(sendBuf, sizeof(sendBuf));  
 
 		clientSocket = INVALID_SOCKET;
 
-		accumulatedSize = 0;  // 초기화 추가
+		accumulatedSize = 0;
 		sessionId = 0;
 		state = SessionState::DISCONNECTING;
 	}
@@ -86,11 +86,18 @@ private:
 
 	CRITICAL_SECTION m_broadcastCS;
 
-	// Accept 스레드에서만 호출
+	/// <summary>
+	/// 고유한 클라이언트 세션 아이디 생성
+	/// </summary>
+	/// <returns>생성된 세션 아이디 반환</returns>
 	UINT32 generateSessionId() {
 		return sessionIdCounter++;
 	}
 
+	/// <summary>
+	/// 클라이언트 세션 관리 공간을 미리 확보
+	/// </summary>
+	/// <param name="maxClientCount">최대 클라이언트 세션 개수 설정</param>
 	void CreateClient(const UINT32 maxClientCount)
 	{
 		for (UINT32 i = 0; i < maxClientCount; i++)
@@ -99,6 +106,10 @@ private:
 		}
 	}
 
+	/// <summary>
+	/// 워커 쓰레드 생성
+	/// </summary>
+	/// <returns></returns>
 	bool CreateWorkerThread()
 	{
 		for (int i = 0; i < MAX_WORKERTHREAD; i++)
@@ -109,6 +120,10 @@ private:
 		return true;
 	}
 
+	/// <summary>
+	/// 클라이언트 Accept 쓰레드 생성
+	/// </summary>
+	/// <returns></returns>
 	bool CreateAccepterThread()
 	{
 		mAccepterThread = thread([this]() { AccepterThread(); });
@@ -127,6 +142,11 @@ private:
 		return nullptr;
 	}
 
+	/// <summary>
+	/// IOCP 핸들과 클라이언트 소켓을 연결
+	/// </summary>
+	/// <param name="pClientInfo"></param>
+	/// <returns></returns>
 	bool BindIOCompletionPort(ClientSession* pClientInfo)
 	{
 		auto hIOCP = CreateIoCompletionPort((HANDLE)pClientInfo->clientSocket, mIOCPHandle, (ULONG_PTR)pClientInfo, NULL);
@@ -142,7 +162,8 @@ private:
 		}
 	}
 
-	void SendLoginPacket(ClientSession* pClientSession)
+	// 패킷 처리 함수들
+	void SendLoginPacket(ClientSession* pClientSession, PacketHeader* packet)
 	{
 		
 	}
@@ -167,6 +188,12 @@ private:
 
 	}
 
+	/// <summary>
+	/// 패킷 보내기
+	/// </summary>
+	/// <param name="pClientSession"></param>
+	/// <param name="packet"></param>
+	/// <returns></returns>
 	bool SendPacket(ClientSession* pClientSession, PacketHeader* packet)
 	{
 		DWORD sendBytes;
@@ -203,6 +230,12 @@ private:
 		// BroadCastMsg(pClientSession, joinMsg.c_str(), joinMsg.length());
 	}
 
+	/// <summary>
+	/// 
+	/// </summary>
+	/// <param name="pClientSession"></param>
+	/// <param name="pMsg"></param>
+	/// <param name="nLen"></param>
 	void NotifyUserJoin(ClientSession* pClientSession, const char* pMsg, int nLen)
 	{
 		if (pClientSession->state == SessionState::AUTHENTICATED)
@@ -213,11 +246,15 @@ private:
 		}
 		else
 		{
-			string chatMsg = "[" + pClientSession->username + "]:" + string(pMsg, nLen);
-			// BroadCastMsg(pClientSession, chatMsg.c_str(), chatMsg.length());
+			string chatMsg = "[" + pClientSession->username + "]:" + string(pMsg, nLen);			
 		}
 	}
 
+	/// <summary>
+	/// 패킷 받기
+	/// </summary>
+	/// <param name="pClientSession"></param>
+	/// <returns></returns>
 	bool ReceivePacket(ClientSession* pClientSession)
 	{
 		DWORD recvBytes = 0;
@@ -252,9 +289,13 @@ private:
 		return true;
 	}
 	
+	/// <summary>
+	/// 패킷 브로드캐스팅
+	/// </summary>
+	/// <param name="pClientSession"></param>
+	/// <param name="packet"></param>
 	void BroadCastPacket(ClientSession* pClientSession, PacketHeader* packet)
 	{
-		printf("[DEBUG] BroadCast called by session %d\n", pClientSession->sessionId);
 		EnterCriticalSection(&m_broadcastCS);
 
 		for (auto& session : m_clientSessions)
@@ -271,23 +312,18 @@ private:
 		LeaveCriticalSection(&m_broadcastCS);
 	}
 
-	void HandleLogin(ClientSession* pClientSession, char* buffer, DWORD dataSize)
-	{
-
-	}
-
+	/// <summary>
+	/// 브로드캐스트 패킷 처리
+	/// </summary>
+	/// <param name="pClientSession"></param>
+	/// <param name="recvPacket"></param>
 	void HandleBroadCast(ClientSession* pClientSession, PacketHeader* recvPacket)
 	{
 		if (recvPacket->size != sizeof(BroadCastReqPacket)) {
-			cout << "BroadCast 패킷 크기 오류!" << endl;
+			cout << "BroadCast Packet Size Error!" << endl;
 			return;
 		}
-
-		cout << "[DEBUG] HandleBroadCast - Original packet size: "
-			<< recvPacket->size << endl;
-
-		// 여기서 BroadCastReqPacket을 이용해서 BroadCastResPacket을 만들기
-
+		
 		BroadCastReqPacket* packet = (BroadCastReqPacket*)recvPacket;
 
 		BroadCastResPacket resPacket;
@@ -302,7 +338,7 @@ private:
 		pClientSession->accumulatedSize += dataSize;
 
 		if (pClientSession->accumulatedSize < sizeof(PacketHeader)) {
-			cout << "패킷 헤더 수신중... (" << pClientSession->accumulatedSize
+			cout << "Packet Header Receiving... (" << pClientSession->accumulatedSize
 				<< "/" << sizeof(PacketHeader) << ")" << endl;
 			return;
 		}
@@ -311,7 +347,7 @@ private:
 		DWORD expectedSize = header->size;
 
 		if (pClientSession->accumulatedSize < expectedSize) {
-			cout << "패킷 본문 수신중..." << endl;
+			cout << "Packet Body Receiving..." << endl;
 			return;
 		}
 
@@ -359,7 +395,7 @@ private:
 			{
 				if (pClientSession && pClientSession->clientSocket != INVALID_SOCKET)
 				{
-					cout << "클라이언트 연결 종료. 세션 ID: " << pClientSession->sessionId << endl;
+					cout << "Client Disconnected. Session ID: " << pClientSession->sessionId << endl;
 					CloseSession(pClientSession);
 				}
 
@@ -374,17 +410,9 @@ private:
 				{
 					ProcessPacket(pClientSession, dwIoSize);
 				}
-				else if (pClientSession->state == SessionState::CONNECTED)
-				{
-					// 여기서는 로그인 패킷만 관리
-					// 패킷 처리 구조 고민해보기
-				}
 
 				// 다시 Recv 시작
 				ReceivePacket(pClientSession);
-
-				// 이제 여기에 ProcessPacket함수를 넣으면 됨. 
-				// 그리고 패킷 처리하게!
 			}
 			else if (pOverlappedEx->operation == IOOperation::SEND)
 			{
@@ -405,10 +433,6 @@ private:
 			{
 				cout << "Client Full() " << endl;			
 				return;
-				// 여기서 continue; 아니면 mIsAccepterRun을 false?
-				// return문으로 빠져나오는군.. 왜냐하면 클라이언트가 허용량이 꽉 찼기 때문!
-
-				// 근데 그렇게 된다면, 클라이언트 쪽에서는 아예 CONNECT가 안되네. 즉, LOGIN_USER_FULL이라는 패킷도 못보내는 상황 (애초에 연결이 안되니까)
 			}
 
 			pClientSession->clientSocket = accept(mListenSocket, (SOCKADDR*)&clntAdr, &clntLen);
@@ -419,9 +443,6 @@ private:
 
 			// 세션 ID 생성
 			pClientSession->sessionId = generateSessionId();
-			pClientSession->state = SessionState::CONNECTED;
-
-			// 로그인 기능 구현 전까지 임시로 AUTHENTICATED
 			pClientSession->state = SessionState::AUTHENTICATED;
 
 			pClientSession->username = "USER" + std::to_string(pClientSession->sessionId);
@@ -440,7 +461,7 @@ private:
 
 			char clientIP[32] = { 0, };
 			inet_ntop(AF_INET, &(clntAdr.sin_addr), clientIP, 32 - 1);
-			cout << "세션 ID: " << pClientSession->sessionId << " 클라이언트 접속: IP" << clientIP << " SOCKET" << pClientSession->clientSocket << endl;
+			cout << "Session ID: " << pClientSession->sessionId << " Client Connected: IP" << clientIP << " SOCKET" << pClientSession->clientSocket << endl;
 
 			++mClientCnt;
 		}

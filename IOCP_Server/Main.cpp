@@ -17,13 +17,13 @@ int main(int argc, char* argv[])
 
 	server.StartServer(MAX_CLIENT);
 
-	printf("아무 키나 누를 때까지 대기합니다\n");
+	printf("Press q or Q to quit\n");
 	while (true)
 	{
 		std::string inputCmd;
 		std::getline(std::cin, inputCmd);
 
-		if (inputCmd == "quit")
+		if (inputCmd == "q" || inputCmd == "Q")
 		{
 			break;
 		}

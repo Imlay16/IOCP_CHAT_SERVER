@@ -88,6 +88,7 @@ struct LoginReqPacket : PacketHeader
 struct LoginResPacket : PacketHeader
 {
 	ErrorCode result;
+	std::string username;
 	
 	LoginResPacket() : PacketHeader(PacketType::LOGIN_RESPONSE)
 	{

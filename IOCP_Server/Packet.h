@@ -90,6 +90,7 @@ struct LoginReqPacket : PacketHeader
 struct LoginResPacket : PacketHeader
 {
 	ErrorCode result;
+	std::string username;
 	
 	LoginResPacket() : PacketHeader(PacketType::LOGIN_RESPONSE)
 	{
@@ -242,8 +243,7 @@ struct CreateRoomReqPacket : PacketHeader
 	// 비밀번호 유무
 	// 비밀번호
 	// 만약 비밀방이 아니면, PW를 입력X
-	// -> 패킷을 나누어야 하나? CreatePublicRoom / CreatePrivateRoom 이렇게..?
-
+	
 	CreateRoomReqPacket() : PacketHeader(PacketType::ROOM_CREATE_REQUEST) { }
 
 	void CreateRoom(UINT8 roomNum, UINT8 maxUser, bool isPrivate, const char* pw)
@@ -306,20 +306,14 @@ struct RoomListReqPacket : PacketHeader
 	}
 };
 
-
-// 고치기!!!
-// ROOM_LIST를 보내줘야하기 때문에, 
-// 패킷 내용을 바꾸어야함!!!! 
-
 struct RoomListResPacket : PacketHeader
 {
 	ErrorCode result;
 	// UINT8 roomNum;
 
-	// 방 리스트 
+	// 방 리스트 (ROOM NUMBER 리스트)
 	// 방 정보들 (CURRENT_USER_COUNT / FULL COUNT)
 	// 비밀번호 있는 방인지 없는 방인지 등등
-	// 방 List 
 
 	RoomListResPacket() : PacketHeader(PacketType::ROOM_LIST_RESPONSE) { }
 
