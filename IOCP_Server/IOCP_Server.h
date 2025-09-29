@@ -12,7 +12,7 @@
 #include <cstring>
 
 #include <iostream>
-#include "Packet.h"
+#include "../Common/Packet.h"
 
 #define MAX_SOCKBUF 2048
 #define MAX_WORKERTHREAD 4
