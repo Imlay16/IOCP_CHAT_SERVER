@@ -59,38 +59,44 @@ enum class ErrorCode : UINT16
 #pragma pack(push, 1)
 struct PacketHeader
 {
+private:
 	PacketType type;
 	UINT16 size;
 
+public:
 	PacketHeader(PacketType packetType) : type(packetType), size(0) {  }
 	PacketHeader(PacketType packetType, UINT16 packetSize) : type(packetType), size(packetSize) { }
 	void SetSize(UINT16 packetSize) { size = packetSize; }
+	UINT16 GetSize() { return size; }
+	PacketType GetType() { return type; }
 };
 
 struct LoginReqPacket : PacketHeader
 {
 	char userId[MAX_USER_ID + 1];
 	char password[MAX_USER_PW + 1];
+	char username[MAX_USER_NAME + 1];
 
 	LoginReqPacket() : PacketHeader(PacketType::LOGIN_REQUEST)
 	{
 		memset(userId, 0, sizeof(userId));
 		memset(password, 0, sizeof(password));
+		memset(username, 0, sizeof(username));
 		SetSize(sizeof(*this));
 	}
 
-	void SetLoginInfo(const char* user, const char* pw)
+	void SetLoginInfo(const char* user, const char* pw, const char* name)
 	{
 		// 로그인에 필요한 정보를 설정
 		strcpy_s(userId, MAX_USER_ID + 1, user);
-		strcpy_s(password, MAX_USER_PW + 1, password);
+		strcpy_s(password, MAX_USER_PW + 1, pw);
+		strcpy_s(username, MAX_USER_NAME + 1, name);
 	}
 };
 
 struct LoginResPacket : PacketHeader
 {
 	ErrorCode result;
-	std::string username;
 	
 	LoginResPacket() : PacketHeader(PacketType::LOGIN_RESPONSE)
 	{
@@ -180,14 +186,15 @@ struct RoomChatResPacket : PacketHeader
 	}
 };
 
-struct WhisperChatPacket : PacketHeader
+struct WhispherChatReqPacket : PacketHeader
 {
-	char targetUser[MAX_USER_NAME + 1];
+	ErrorCode result;
+	char receiver[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	WhisperChatPacket() : PacketHeader(PacketType::WHISPER_REQUEST)
+	WhispherChatReqPacket() : PacketHeader(PacketType::WHISPER_REQUEST)
 	{
-		memset(targetUser, 0, sizeof(targetUser));
+		memset(receiver, 0, sizeof(receiver));
 		memset(message, 0, sizeof(message));
 	}
 
@@ -195,10 +202,39 @@ struct WhisperChatPacket : PacketHeader
 	{
 		if (!user || !msg) return;
 
-		strcpy_s(targetUser, sizeof(targetUser), user);
+		strcpy_s(receiver, sizeof(receiver), user);
 		strcpy_s(message, sizeof(message), msg);
 		SetSize(sizeof(*this));
 	}
+	
+	void SetResult(ErrorCode error) { result = error; }
+	const char* GetReceiver() { return receiver; }
+	const char* GetMessage() { return message; }
+};
+
+struct WhispherChatResPacket : PacketHeader
+{
+	ErrorCode result;
+	char sender[MAX_USER_NAME + 1];
+	char message[MAX_CHAT_SIZE + 1];
+
+	WhispherChatResPacket() : PacketHeader(PacketType::WHISPER_RESPONSE)
+	{
+		memset(sender, 0, sizeof(sender));
+		memset(message, 0, sizeof(message));
+	}
+
+	void SetMessage(const char* user, const char* msg)
+	{
+		if (!user || !msg) return;
+
+		strcpy_s(sender, sizeof(sender), user);
+		strcpy_s(message, sizeof(message), msg);
+		SetSize(sizeof(*this));
+	}
+
+	void SetResult(ErrorCode error) { result = error; }
+	const char* GetSender() { return sender; }
 };
 
 struct UserJoinNotifyPacket : PacketHeader

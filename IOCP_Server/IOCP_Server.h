@@ -6,6 +6,7 @@
 
 #include <thread>
 #include <vector>
+#include <unordered_map>
 
 #include <string>
 #include <cstring>
@@ -20,7 +21,6 @@ using namespace std;
 
 enum class SessionState {
 	CONNECTED,
-	UNAUTHENTICATED,
 	AUTHENTICATED,
 	DISCONNECTING
 };
@@ -75,7 +75,7 @@ class IOCP_SERVER
 private:
 	// 멤버 변수
 	UINT32 sessionIdCounter = 1;
-	vector<ClientSession> m_clientSessions;
+	vector<ClientSession> mClientSessions;
 	SOCKET mListenSocket;
 	int mClientCnt;
 	vector<thread> mIOWorkerThreads;
@@ -84,7 +84,11 @@ private:
 	bool mIsWorkerRun = true;
 	bool mIsAccepterRun = true;
 
-	CRITICAL_SECTION m_broadcastCS;
+	unordered_map<string, UINT32> mSessionIdByName;
+	unordered_map<UINT32, ClientSession*> mSessionById;
+
+	SRWLOCK mSrwLock;
+	CRITICAL_SECTION mBroadcastCS;
 
 	/// <summary>
 	/// 고유한 클라이언트 세션 아이디 생성
@@ -102,7 +106,7 @@ private:
 	{
 		for (UINT32 i = 0; i < maxClientCount; i++)
 		{
-			m_clientSessions.emplace_back();
+			mClientSessions.emplace_back();
 		}
 	}
 
@@ -132,7 +136,7 @@ private:
 
 	ClientSession* GetEmptyClientInfo()
 	{
-		for (auto& client : m_clientSessions)
+		for (auto& client : mClientSessions)
 		{
 			if (client.clientSocket == INVALID_SOCKET)
 			{
@@ -140,6 +144,32 @@ private:
 			}
 		}
 		return nullptr;
+	}
+
+	ClientSession* FindSessionByName(const string& name)
+	{
+		AcquireSRWLockShared(&mSrwLock);
+
+		auto nameIt = mSessionIdByName.find(name);
+		if (nameIt == mSessionIdByName.end())
+		{
+			ReleaseSRWLockShared(&mSrwLock);
+			return nullptr;
+		}
+
+		UINT32 sessionId = nameIt->second;
+		auto sessionIt = mSessionById.find(sessionId);
+
+		ClientSession* result = (sessionIt != mSessionById.end()) ? sessionIt->second : nullptr;
+
+		ReleaseSRWLockShared(&mSrwLock);
+
+		if (result && result->clientSocket == INVALID_SOCKET)
+		{
+			return nullptr;
+		}
+
+		return result;
 	}
 
 	/// <summary>
@@ -197,13 +227,13 @@ private:
 	bool SendPacket(ClientSession* pClientSession, PacketHeader* packet)
 	{
 		DWORD sendBytes;
-		memcpy(pClientSession->sendBuf, (char*)packet, packet->size);
+		memcpy(pClientSession->sendBuf, (char*)packet, packet->GetSize());
 
 		ZeroMemory(&pClientSession->sendOverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
 
 		pClientSession->sendOverlappedEx.operation = IOOperation::SEND;
 		pClientSession->sendOverlappedEx.wsaBuf.buf = pClientSession->sendBuf;
-		pClientSession->sendOverlappedEx.wsaBuf.len = packet->size;
+		pClientSession->sendOverlappedEx.wsaBuf.len = packet->GetSize();
 
 		int ret = WSASend(pClientSession->clientSocket,
 						  &(pClientSession->sendOverlappedEx.wsaBuf),
@@ -219,35 +249,6 @@ private:
 			return false;
 		}
 		return true;
-	}
-
-	// 클라이언트가 로그인할 시, 보내기
-	void UserJoinNotify(ClientSession* pClientSession)
-	{
-		string joinMsg;
-		joinMsg = pClientSession->username + " has joined.";		
-		
-		// BroadCastMsg(pClientSession, joinMsg.c_str(), joinMsg.length());
-	}
-
-	/// <summary>
-	/// 
-	/// </summary>
-	/// <param name="pClientSession"></param>
-	/// <param name="pMsg"></param>
-	/// <param name="nLen"></param>
-	void NotifyUserJoin(ClientSession* pClientSession, const char* pMsg, int nLen)
-	{
-		if (pClientSession->state == SessionState::AUTHENTICATED)
-		{
-			pClientSession->username = string(pMsg, nLen);			
-			pClientSession->state = SessionState::CONNECTED;
-			UserJoinNotify(pClientSession);
-		}
-		else
-		{
-			string chatMsg = "[" + pClientSession->username + "]:" + string(pMsg, nLen);			
-		}
 	}
 
 	/// <summary>
@@ -279,7 +280,7 @@ private:
 			&flag,
 			(LPWSAOVERLAPPED) & (pClientSession->recvOverlappedEx),
 			NULL);
-
+		
 		if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING)
 		{
 			cout << "WSARecv Error() " << WSAGetLastError() << endl;
@@ -296,9 +297,9 @@ private:
 	/// <param name="packet"></param>
 	void BroadCastPacket(ClientSession* pClientSession, PacketHeader* packet)
 	{
-		EnterCriticalSection(&m_broadcastCS);
+		EnterCriticalSection(&mBroadcastCS);
 
-		for (auto& session : m_clientSessions)
+		for (auto& session : mClientSessions)
 		{
 			if (session.clientSocket != INVALID_SOCKET)
 			{
@@ -309,7 +310,60 @@ private:
 			}
 		}
 
-		LeaveCriticalSection(&m_broadcastCS);
+		LeaveCriticalSection(&mBroadcastCS);
+	}
+
+	/// <summary>
+	/// 로그인 패킷 처리
+	/// </summary>
+	/// <param name="pClientSession"></param>
+	/// <param name="recvPacket"></param>
+	void HandleLogin(ClientSession* pClientSession, PacketHeader* recvPacket)
+	{
+		if (recvPacket->GetSize() != sizeof(LoginReqPacket))
+		{
+			cout << "Login Packet Size Error!" << endl;
+			return;
+		}
+
+		LoginReqPacket* packet = (LoginReqPacket*)recvPacket;
+
+		bool isValid = CheckUserCredentials(packet->userId, packet->password);
+		LoginResPacket resPacket;
+
+		if (isValid)
+		{
+			AcquireSRWLockExclusive(&mSrwLock);
+
+			pClientSession->state = SessionState::AUTHENTICATED;
+			pClientSession->username = packet->username;	
+
+			// 이 두 코드를 RegisterClient() 함수로?
+			mSessionIdByName.insert_or_assign(pClientSession->username, pClientSession->sessionId);
+			mSessionById.insert_or_assign(pClientSession->sessionId, pClientSession);
+
+			ReleaseSRWLockExclusive(&mSrwLock);
+
+			resPacket.result = ErrorCode::SUCCESS;
+			cout << "[Login Success] " << packet->username << endl;
+		}
+		else
+		{
+			resPacket.result = ErrorCode::AUTH_FAILED;
+			cout << "[Login Failed] " << packet->userId << endl;
+		}		
+	
+		// + UserJoinNotify로 모든 연결된 클라이언트들에게 유저 조인 메세지 브로드캐스트 하기
+		SendPacket(pClientSession, &resPacket);
+	}
+
+	bool CheckUserCredentials(const char* userId, const char* userPw)
+	{
+		// hash table 체크
+		// unordered_map을 이용.
+		// ["userId"] == userPw를 확인하여 true or false 리턴
+
+		return true;
 	}
 
 	/// <summary>
@@ -319,7 +373,7 @@ private:
 	/// <param name="recvPacket"></param>
 	void HandleBroadCast(ClientSession* pClientSession, PacketHeader* recvPacket)
 	{
-		if (recvPacket->size != sizeof(BroadCastReqPacket)) {
+		if (recvPacket->GetSize() != sizeof(BroadCastReqPacket)) {
 			cout << "BroadCast Packet Size Error!" << endl;
 			return;
 		}
@@ -333,6 +387,41 @@ private:
 		BroadCastPacket(pClientSession, (PacketHeader*)&resPacket);
 	}
 
+	/// <summary>
+	/// 귓속말 패킷 처리
+	/// </summary>
+	/// <param name="pClientSession"></param>
+	/// <param name="dataSize"></param>
+	void HandleWhispher(ClientSession* pClientSession, PacketHeader* recvPacket)
+	{
+		if (recvPacket->GetSize() != sizeof(WhispherChatReqPacket)) {
+			cout << "Whispher Packet Size Error!" << endl;
+			return;
+		}
+		
+		WhispherChatReqPacket* packet = (WhispherChatReqPacket*)recvPacket;
+
+		string receiver = packet->GetReceiver();
+		
+		ClientSession* targetClient = FindSessionByName(receiver);
+		if (targetClient != nullptr)
+		{
+			WhispherChatResPacket resPacket;
+			resPacket.SetResult(ErrorCode::SUCCESS);
+			resPacket.SetMessage(pClientSession->username.c_str(), packet->GetMessageW());
+			SendPacket(targetClient, &resPacket);
+		}
+		else
+		{
+			WhispherChatResPacket resPacket;
+			resPacket.SetResult(ErrorCode::USER_NOT_FOUND);
+			snprintf(resPacket.message, sizeof(resPacket.message),
+				"User '%s' not found", packet->receiver);
+
+			SendPacket(pClientSession, &resPacket);
+		}
+	}
+
 	void ProcessPacket(ClientSession* pClientSession, DWORD dataSize)
 	{
 		pClientSession->accumulatedSize += dataSize;
@@ -344,34 +433,52 @@ private:
 		}
 
 		PacketHeader* header = (PacketHeader*)pClientSession->recvBuf;
-		DWORD expectedSize = header->size;
+		DWORD expectedSize = header->GetSize();
 
 		if (pClientSession->accumulatedSize < expectedSize) {
 			cout << "Packet Body Receiving..." << endl;
 			return;
 		}
 
-		switch (header->type)
+		switch (header->GetType())
 		{
+		case PacketType::LOGIN_REQUEST:
+			HandleLogin(pClientSession, header);
+			break;
+
 		case PacketType::BROADCAST_REQUEST:
-			HandleBroadCast(pClientSession, header);
-			break;
 		case PacketType::ROOM_CHAT_REQUEST:
-
-			break;
 		case PacketType::ROOM_LIST_REQUEST:
-
-			break;
 		case PacketType::WHISPER_REQUEST:
-
+			// 인증된 사용자만 처리
+			if (pClientSession->state == SessionState::AUTHENTICATED) {
+				switch (header->GetType()) {
+				case PacketType::BROADCAST_REQUEST:
+					HandleBroadCast(pClientSession, header);
+					break;
+				case PacketType::ROOM_CHAT_REQUEST:
+					// HandleRoomChat(pClientSession, header);
+					break;
+				case PacketType::ROOM_LIST_REQUEST:
+					// HandleRoomList(pClientSession, header);
+					break;
+				case PacketType::WHISPER_REQUEST:
+					HandleWhispher(pClientSession, header);
+					break;
+				}
+			}
+			else {
+				cout << "[Client " << pClientSession->sessionId << "] Not authenticated. Packet ignored." << endl;
+				// 또는 에러 응답 패킷 전송
+			}
 			break;
+
 		default:
 			cout << "Unknown Packet Type" << endl;
 			break;
 		}
 
 		pClientSession->accumulatedSize = 0;
-
 		cout << "[DEBUG] Packet processing complete. Buffer reset." << endl;
 	}
 
@@ -406,10 +513,7 @@ private:
 
 			if (pOverlappedEx->operation == IOOperation::RECV)
 			{				
-				if (pClientSession->state == SessionState::AUTHENTICATED)
-				{
-					ProcessPacket(pClientSession, dwIoSize);
-				}
+				ProcessPacket(pClientSession, dwIoSize);
 
 				// 다시 Recv 시작
 				ReceivePacket(pClientSession);
@@ -431,7 +535,7 @@ private:
 			ClientSession* pClientSession = GetEmptyClientInfo();
 			if (pClientSession == NULL)
 			{
-				cout << "Client Full() " << endl;			
+				cout << "Client Full() " << endl;
 				return;
 			}
 
@@ -443,9 +547,7 @@ private:
 
 			// 세션 ID 생성
 			pClientSession->sessionId = generateSessionId();
-			pClientSession->state = SessionState::AUTHENTICATED;
-
-			pClientSession->username = "USER" + std::to_string(pClientSession->sessionId);
+			pClientSession->state = SessionState::CONNECTED;		
 
 			bool ret = BindIOCompletionPort(pClientSession);
 			if (ret == false)
@@ -537,12 +639,13 @@ public:
 	IOCP_SERVER()
 	{
 		mClientCnt = 0;          
-		InitializeCriticalSection(&m_broadcastCS);
+		InitializeCriticalSection(&mBroadcastCS);
+		InitializeSRWLock(&mSrwLock);
 	}
 
 	~IOCP_SERVER()
 	{
-		DeleteCriticalSection(&m_broadcastCS);
+		DeleteCriticalSection(&mBroadcastCS);
 		WSACleanup();
 	}
 
