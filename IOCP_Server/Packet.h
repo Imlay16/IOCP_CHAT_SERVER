@@ -59,11 +59,9 @@ enum class ErrorCode : UINT16
 #pragma pack(push, 1)
 struct PacketHeader
 {
-private:
 	PacketType type;
 	UINT16 size;
 
-public:
 	PacketHeader(PacketType packetType) : type(packetType), size(0) {  }
 	PacketHeader(PacketType packetType, UINT16 packetSize) : type(packetType), size(packetSize) { }
 	void SetSize(UINT16 packetSize) { size = packetSize; }
