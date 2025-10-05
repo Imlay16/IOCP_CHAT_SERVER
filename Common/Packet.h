@@ -18,8 +18,8 @@ enum class PacketType : UINT16
 	BROADCAST_RESPONSE = 3002,
 	ROOM_CHAT_REQUEST = 3003,
 	ROOM_CHAT_RESPONSE = 3004,
-	WHISPHER_REQUEST = 3005,
-	WHISPHER_RESPONSE = 3006,
+	WHISPER_REQUEST = 3005,
+	WHISPER_RESPONSE = 3006,
 
 	ROOM_LIST_REQUEST = 4001,
 	ROOM_LIST_RESPONSE = 4002,
@@ -102,13 +102,14 @@ struct LoginResPacket : PacketHeader
 	}
 };
 
-struct BroadCastReqPacket : PacketHeader
+struct BroadcastReqPacket : PacketHeader
 {
 	char message[MAX_CHAT_SIZE + 1];
 
-	BroadCastReqPacket() : PacketHeader(PacketType::BROADCAST_REQUEST)
+	BroadcastReqPacket() : PacketHeader(PacketType::BROADCAST_REQUEST)
 	{
 		memset(message, 0, sizeof(message));
+		SetSize(sizeof(*this));
 	}
 
 	void SetMessage(const char* msg)
@@ -118,13 +119,13 @@ struct BroadCastReqPacket : PacketHeader
 	}
 };
 
-struct BroadCastResPacket : PacketHeader
+struct BroadcastResPacket : PacketHeader
 {
 	// Res할 땐, username 필요! 누가 보냈는지를 명시해야함
 	char user[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	BroadCastResPacket() : PacketHeader(PacketType::BROADCAST_RESPONSE)
+	BroadcastResPacket() : PacketHeader(PacketType::BROADCAST_RESPONSE)
 	{
 		memset(user, 0, sizeof(user));
 		memset(message, 0, sizeof(message));
@@ -133,7 +134,7 @@ struct BroadCastResPacket : PacketHeader
 
 	void SetUser(const char* name)
 	{
-		if (!user) return;
+		if (!name) return;
 		strcpy_s(user, sizeof(user), name);
 	}
 
@@ -184,42 +185,42 @@ struct RoomChatResPacket : PacketHeader
 	}
 };
 
-struct WhispherChatReqPacket : PacketHeader
+struct WhisperChatReqPacket : PacketHeader
 {
-	ErrorCode result;
 	char receiver[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	WhispherChatReqPacket() : PacketHeader(PacketType::WHISPHER_REQUEST)
+	WhisperChatReqPacket() : PacketHeader(PacketType::WHISPER_REQUEST)
 	{
 		memset(receiver, 0, sizeof(receiver));
 		memset(message, 0, sizeof(message));
+		SetSize(sizeof(*this));
 	}
 
-	void SetMessage(const char* user, const char* msg)
+	void SetWhisper(const char* receiverName, const char* msg)
 	{
-		if (!user || !msg) return;
-
-		strcpy_s(receiver, sizeof(receiver), user);
+		if (!receiverName || !msg) return;
+		strcpy_s(receiver, sizeof(receiver), receiverName);
 		strcpy_s(message, sizeof(message), msg);
 		SetSize(sizeof(*this));
 	}
 
-	void SetResult(ErrorCode error) { result = error; }
+	// void SetResult(ErrorCode error) { result = error; }
 	const char* GetReceiver() { return receiver; }
 	const char* GetMessage() { return message; }
 };
 
-struct WhispherChatResPacket : PacketHeader
+struct WhisperChatResPacket : PacketHeader
 {
 	ErrorCode result;
 	char sender[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	WhispherChatResPacket() : PacketHeader(PacketType::WHISPHER_RESPONSE)
-	{
+	WhisperChatResPacket() : PacketHeader(PacketType::WHISPER_RESPONSE)
+	{		
 		memset(sender, 0, sizeof(sender));
 		memset(message, 0, sizeof(message));
+		SetSize(sizeof(*this));
 	}
 
 	void SetMessage(const char* user, const char* msg)
@@ -228,7 +229,6 @@ struct WhispherChatResPacket : PacketHeader
 
 		strcpy_s(sender, sizeof(sender), user);
 		strcpy_s(message, sizeof(message), msg);
-		SetSize(sizeof(*this));
 	}
 
 	void SetResult(ErrorCode error) { result = error; }
@@ -293,14 +293,17 @@ struct CreateRoomResPacket : PacketHeader
 {
 	ErrorCode result;
 
-	CreateRoomResPacket() : PacketHeader(PacketType::ROOM_CREATE_RESPONSE, sizeof(*this)) {}
+	CreateRoomResPacket() : PacketHeader(PacketType::ROOM_CREATE_RESPONSE)
+	{
+		SetSize(sizeof(*this));
+	}
 };
 
-struct RoomJoinReqPacket : PacketHeader
+struct JoinRoomReqPacket : PacketHeader
 {
 	UINT8 roomNum;
 
-	RoomJoinReqPacket() : PacketHeader(PacketType::ROOM_JOIN_REQUEST) {}
+	JoinRoomReqPacket() : PacketHeader(PacketType::ROOM_JOIN_REQUEST) {}
 
 	void SetRoom(UINT8 roomNum)
 	{
@@ -309,12 +312,12 @@ struct RoomJoinReqPacket : PacketHeader
 	}
 };
 
-struct RoomJoinResPacket : PacketHeader
+struct JoinRoomResPacket : PacketHeader
 {
 	ErrorCode result;
 	char user[MAX_USER_NAME + 1];
 
-	RoomJoinResPacket() : PacketHeader(PacketType::ROOM_JOIN_RESPONSE, sizeof(*this)) {}
+	JoinRoomResPacket() : PacketHeader(PacketType::ROOM_JOIN_RESPONSE, sizeof(*this)) {}
 };
 
 struct RoomLeaveReqPacket : PacketHeader
@@ -327,16 +330,22 @@ struct RoomLeaveResPacket : PacketHeader
 	ErrorCode result;
 	char user[MAX_USER_NAME + 1];
 
-	RoomLeaveResPacket() : PacketHeader(PacketType::ROOM_LEAVE_RESPONSE, sizeof(*this)) {}
+	RoomLeaveResPacket() : PacketHeader(PacketType::ROOM_LEAVE_RESPONSE) 
+	{
+		SetSize(sizeof(*this));
+	}
 };
 
 struct RoomListReqPacket : PacketHeader
 {
-	RoomListReqPacket() : PacketHeader(PacketType::ROOM_LIST_REQUEST) {}
+	RoomListReqPacket() : PacketHeader(PacketType::ROOM_LIST_REQUEST) 
+	{
+		SetSize(sizeof(*this));
+	}
 
 	void SetRoom(UINT8 room)
 	{
-		SetSize(sizeof(*this));
+		
 	}
 };
 
@@ -349,12 +358,14 @@ struct RoomListResPacket : PacketHeader
 	// 방 정보들 (CURRENT_USER_COUNT / FULL COUNT)
 	// 비밀번호 있는 방인지 없는 방인지 등등
 
-	RoomListResPacket() : PacketHeader(PacketType::ROOM_LIST_RESPONSE) {}
+	RoomListResPacket() : PacketHeader(PacketType::ROOM_LIST_RESPONSE)
+	{
+		SetSize(sizeof(*this));
+	}
 
 	void SetRoom(UINT8 room)
 	{
 		// roomNum = room;
-		SetSize(sizeof(*this));
 	}
 };
 #pragma pack(pop)

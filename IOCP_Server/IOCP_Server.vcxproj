@@ -134,12 +134,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="IOCP_Server.h" />
+    <ClInclude Include="ClientSession.h" />
+    <ClInclude Include="IOCPServer.h" />
     <ClInclude Include="Packet.h" />
+    <ClInclude Include="PacketHandler.h" />
     <ClInclude Include="RedisManager.h" />
+    <ClInclude Include="SessionManager.h" />
+    <ClInclude Include="SRWLockGuard.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ClientSession.cpp" />
+    <ClCompile Include="IOCPServer.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="PacketHandler.cpp" />
+    <ClCompile Include="SessionManager.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
