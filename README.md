@@ -161,8 +161,23 @@ class ClientSession {
 };
 
 ```
-SendLock을 이용해 Send 중이면 sendQueue에 패킷을 enqueue. I/O Completion 알림을 통해 Send Completed 시,
-다시 ProcessSend() 함수를 호출하여 sendQueue 안에 있는 패킷을 처리.
+📌 **동작 원: Send Queue 패턴**
+
+- **패킷 큐잉**: 전송 요청이 들어오면 sendQueue에 추가
+- **전송 상태 확인**:
+전송 중이 아니면 → 즉시 WSASend() 호출
+전송 중이면 → 큐에만 추가 (대기)
+
+- **완료 처리**: IOCP 완료 통지 받으면 큐에서 제거 후 다음 패킷 전송
+- **동기화**: sendLock으로 여러 워커 스레드의 큐 접근 보호
+
+✅ **효과**
+FIFO 구조로 전송 순서 보장
+isSending 중복 전송 방지 플래그
+sendLock 여러 스레드의 동시 큐 접근 방지
+IOCP 콜백완료 시 자동으로 다음 패킷 처리
+
+메시지 순서 완벽 보장 + 경쟁 상태(race condition) 방지
 <br>
 
 ## 🚀 기술 스택
