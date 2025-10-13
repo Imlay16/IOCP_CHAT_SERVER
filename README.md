@@ -160,9 +160,9 @@ class ClientSession {
     SRWLOCK mSendLock;
 };
 
+```
 SendLock을 이용해 Send 중이면 sendQueue에 패킷을 enqueue. I/O Completion 알림을 통해 Send Completed 시,
 다시 ProcessSend() 함수를 호출하여 sendQueue 안에 있는 패킷을 처리.
-```
 <br>
 
 ## 🚀 기술 스택
