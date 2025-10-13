@@ -144,6 +144,27 @@ enum class SessionState {
 
 <br>
 
+### 6. 비동기 Send 순서 보장 (Send Queue)
+
+📌 **문제 상황**
+IOCP의 비동기 특성상 여러 스레드에서 동시에 `WSASend()`를 호출하면:
+- 패킷 A, B, C 순서로 전송 시도 → B, A, C 순서로 도착 가능
+- 채팅 메시지 순서가 뒤바뀌는 치명적 문제 발생
+
+📌 **해결 방법: Send Queue 패턴**
+```cpp
+// 각 세션마다 독립적인 전송 큐 유지
+class ClientSession {
+    std::queue<vector<char>> mSendQueue;
+    bool mIsSending;
+    SRWLOCK mSendLock;
+};
+
+SendLock을 이용해 Send 중이면 sendQueue에 패킷을 enqueue. I/O Completion 알림을 통해 Send Completed 시,
+다시 ProcessSend() 함수를 호출하여 sendQueue 안에 있는 패킷을 처리.
+
+<br>
+
 ## 🚀 기술 스택
 
 | 분류 | 기술 |
