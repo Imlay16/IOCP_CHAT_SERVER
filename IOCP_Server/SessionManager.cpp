@@ -83,7 +83,7 @@ void SessionManager::BroadcastPacket(ClientSession* excludeSession, const char* 
 	{
 		if (session.IsValid() && &session != excludeSession)
 		{
-			session.SendPacekt(data, length);
+			session.SendPacket(data, length);
 		}
 	}
 }

@@ -3,48 +3,50 @@
 
 using namespace std;
 
-void PacketHandler::ProcessPacket(ClientSession* session, DWORD dataSize, SessionManager* sessionManager)
+void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessionManager)
 {
-	session->AddAccumulatedSize(dataSize);
+	RingBuffer& recvBuffer = session->GetRecvBuffer();
 
 	while (true)
 	{
-		DWORD currentAccumulatedSize = session->GetAccumulatedSize();
+		PacketHeader header;
 
-		cout << "[ProcessPacket] Loop - Accumulated: " << currentAccumulatedSize << endl;
-
-		if (currentAccumulatedSize < sizeof(PacketHeader))
+		if (!recvBuffer.Peek((char*)&header, sizeof(PacketHeader)))
 		{
-			cout << "[PacketHandler] Waiting for header... (" << currentAccumulatedSize << "/" << sizeof(PacketHeader) << ")" << endl;
+			// cout << "[PacketHandler] Waiting for header... (has " << recvBuffer.GetDataSize() << " bytes)" << endl;
 			break;
 		}
 
-		PacketHeader* header = (PacketHeader*)session->GetRecvBuffer();
-		DWORD packetSize = header->GetSize();
+		DWORD packetSize = header.GetSize();
 
-		if (currentAccumulatedSize < packetSize)
+		if (recvBuffer.GetDataSize() < packetSize)
 		{
-			cout << "[PacketHandler] Waiting for body..." << endl;
+			// cout << "[PacketHandler] Waiting for body... (need " << packetSize << ", has" << recvBuffer.GetDataSize() << ")" << endl;
 			break;
 		}
 
-		switch (header->GetType())
+		vector<char> packetBuffer(packetSize);
+		recvBuffer.Peek(packetBuffer.data(), packetSize);
+
+		PacketHeader* fullHeader = (PacketHeader*)packetBuffer.data();
+
+		switch (header.GetType())
 		{
 		case PacketType::LOGIN_REQUEST:
-			HandleLogin(session, header, sessionManager);
+			HandleLogin(session, fullHeader, sessionManager);
 			break;
 
 		case PacketType::BROADCAST_REQUEST:
 		case PacketType::WHISPER_REQUEST:
 			if (session->IsAuthenticated())
 			{
-				if (header->GetType() == PacketType::BROADCAST_REQUEST)
+				if (fullHeader->GetType() == PacketType::BROADCAST_REQUEST)
 				{
-					HandleBroadcast(session, header, sessionManager);
+					HandleBroadcast(session, fullHeader, sessionManager);
 				}
 				else
 				{
-					HandleWhispher(session, header, sessionManager);
+					HandleWhispher(session, fullHeader, sessionManager);
 				}
 			}
 			else
@@ -58,15 +60,9 @@ void PacketHandler::ProcessPacket(ClientSession* session, DWORD dataSize, Sessio
 			break;
 		}
 
-		DWORD remainingSize = currentAccumulatedSize - packetSize;
-		if (remainingSize > 0)
-		{
-			memmove(session->GetRecvBuffer(),
-					session->GetRecvBuffer() + packetSize,
-					remainingSize);
-		}
-		
-		session->SetAccumulatedSize(remainingSize);
+		recvBuffer.Consume(packetSize);
+
+		cout << "[PacketHandler] Packet processed. Remaining: " << recvBuffer.GetDataSize() << " bytes" << endl;
 	}
 }
 
@@ -98,7 +94,7 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 		cout << "[PacketHandler] Login failed: " << packet->userId << endl;
 	}
 
-	session->SendPacekt((char*)&resPacket, sizeof(resPacket));
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
 
 void PacketHandler::HandleBroadcast(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
@@ -137,14 +133,14 @@ void PacketHandler::HandleWhispher(ClientSession* session, PacketHeader* header,
 	{
 		resPacket.result = ErrorCode::SUCCESS;
 		resPacket.SetMessage(session->GetUsername().c_str(), packet->GetMessageW());
-		targetSession->SendPacekt((char*)&resPacket, sizeof(resPacket));
+		targetSession->SendPacket((char*)&resPacket, sizeof(resPacket));
 	}
 	else
 	{
 		resPacket.result = ErrorCode::USER_NOT_FOUND;
 		snprintf(resPacket.message, sizeof(resPacket.message),
 			"User '%s' not found", packet->receiver);
-		session->SendPacekt((char*)&resPacket, sizeof(resPacket));
+		session->SendPacket((char*)&resPacket, sizeof(resPacket));
 	}
 }
 

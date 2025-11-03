@@ -166,8 +166,16 @@ void IOCPServer::WorkerThread()
 
 		if (overlappedEx->operation == IOOperation::RECV)
 		{
-			PacketHandler::ProcessPacket(session, transferred, mSessionManager);
-			session->RegisterRecv();
+			session->GetRecvBuffer().Write(session->GetTempRecvBuf(), transferred);
+
+			PacketHandler::ProcessPacket(session, mSessionManager);
+			
+			if (!session->RegisterRecv())
+			{
+				cout << "[IOCP Server] RegisterRecv failed! Session: " << session->GetSessionId() << endl;
+				mSessionManager->UnregisterSession(session);
+				session->Reset();
+			}			
 		}
 		else if (overlappedEx->operation == IOOperation::SEND)
 		{

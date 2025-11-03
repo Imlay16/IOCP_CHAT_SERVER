@@ -2,16 +2,16 @@
 #include "SRWLockGuard.h"
 #include <iostream>
 
-ClientSession::ClientSession() 
+ClientSession::ClientSession()
 	: mSessionId(0)
 	, mSocket(INVALID_SOCKET)
 	, mState(SessionState::DISCONNECTING)
-	, mAccumulatedSize(0)
+	, mRecvBuffer(MAX_SOCKBUF * 2)
 	, mIsSending(false)
 {
 	ZeroMemory(&mRecvOverlappedEx, sizeof(OverlappedEx));
 	ZeroMemory(&mSendOverlappedEx, sizeof(OverlappedEx));
-	ZeroMemory(mRecvBuf, sizeof(mRecvBuf));
+	ZeroMemory(mTempRecvBuf, sizeof(mTempRecvBuf));
 	ZeroMemory(mSendBuf, sizeof(mSendBuf));
 
 	InitializeSRWLock(&mSendLock);
@@ -26,8 +26,7 @@ void ClientSession::Initialize(SOCKET socket, UINT32 sessionId)
 {
 	mSocket = socket;
 	mSessionId = sessionId;
-	mState = SessionState::CONNECTD;
-	mAccumulatedSize = 0;
+	mState = SessionState::CONNECTED;
 	mIsSending = false;
 	mUsername.clear();
 
@@ -38,7 +37,7 @@ void ClientSession::Initialize(SOCKET socket, UINT32 sessionId)
 
 	ZeroMemory(&mRecvOverlappedEx, sizeof(OverlappedEx));
 	ZeroMemory(&mSendOverlappedEx, sizeof(OverlappedEx));
-	ZeroMemory(mRecvBuf, sizeof(mRecvBuf));
+	ZeroMemory(mTempRecvBuf, sizeof(mTempRecvBuf));
 	ZeroMemory(mSendBuf, sizeof(mSendBuf));
 }
 
@@ -55,7 +54,6 @@ void ClientSession::Reset()
 
 	mSessionId = 0;
 	mState = SessionState::DISCONNECTING;
-	mAccumulatedSize = 0;
 	mUsername.clear();
 
 	while (!mSendQueue.empty())
@@ -66,7 +64,7 @@ void ClientSession::Reset()
 	mIsSending = false;
 }
 
-bool ClientSession::SendPacekt(const char* data, int length)
+bool ClientSession::SendPacket(const char* data, int length)
 {
 	if (mSocket == INVALID_SOCKET)
 	{
@@ -148,7 +146,7 @@ bool ClientSession::RegisterRecv()
 		return false;
 	}
 
-	if (mAccumulatedSize >= MAX_SOCKBUF)
+	if (mRecvBuffer.IsFull())
 	{
 		cout << "[ClientSession] Buffer overflow detected!" << endl;
 		return false;
@@ -159,8 +157,8 @@ bool ClientSession::RegisterRecv()
 
 	ZeroMemory(&mRecvOverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
 	mRecvOverlappedEx.operation = IOOperation::RECV;
-	mRecvOverlappedEx.wsaBuf.buf = mRecvBuf + mAccumulatedSize; 
-	mRecvOverlappedEx.wsaBuf.len = MAX_SOCKBUF - mAccumulatedSize; 
+	mRecvOverlappedEx.wsaBuf.buf = mTempRecvBuf; 
+	mRecvOverlappedEx.wsaBuf.len = MAX_SOCKBUF; 
 
 	int ret = WSARecv(mSocket,
 		&mRecvOverlappedEx.wsaBuf,

@@ -3,14 +3,15 @@
 #include <string>
 #include <queue>
 #include <vector>
+#include "RingBuffer.h"
 
-#define MAX_SOCKBUF 2048
+#define MAX_SOCKBUF 4096
 
 using namespace std;
 
 enum class SessionState
 {
-	CONNECTD,
+	CONNECTED,
 	AUTHENTICATED,
 	DISCONNECTING
 };
@@ -35,10 +36,16 @@ public:
 	ClientSession();
 	~ClientSession();
 
+	ClientSession(ClientSession&&) noexcept = default;
+	ClientSession& operator=(ClientSession&&) noexcept = default;
+
+	ClientSession(const ClientSession&) = delete;
+	ClientSession& operator=(const ClientSession&) = delete;
+
 	void Initialize(SOCKET socket, UINT32 sessionId);
 	void Reset();
 
-	bool SendPacekt(const char* data, int length);
+	bool SendPacket(const char* data, int length);
 	bool RegisterRecv();
 	void OnSendCompleted();
 
@@ -47,15 +54,13 @@ public:
 	SOCKET GetSocket() const { return mSocket; }
 	SessionState GetState() const { return mState; }	
 	const string& GetUsername() const { return mUsername; }
-	char* GetRecvBuffer() { return mRecvBuf; }
-	DWORD GetAccumulatedSize() const { return mAccumulatedSize; }
+
+	char* GetTempRecvBuf() { return mTempRecvBuf; }
+	RingBuffer& GetRecvBuffer() { return mRecvBuffer; }
 
 	// Setter
 	void SetState(SessionState state) { mState = state; }
 	void SetUsername(const string& username) { mUsername = username; }
-	void AddAccumulatedSize(DWORD size) { mAccumulatedSize += size; }
-	void SetAccumulatedSize(DWORD size) { mAccumulatedSize = size; }
-	void ResetAccumulatedSize() { mAccumulatedSize = 0; }
 
 	bool IsValid() const { return mSocket != INVALID_SOCKET; }
 	bool IsAuthenticated() const { return mState == SessionState::AUTHENTICATED; }
@@ -73,8 +78,8 @@ private:
 
 	// Recv
 	OverlappedEx mRecvOverlappedEx;
-	char mRecvBuf[MAX_SOCKBUF];
-	DWORD mAccumulatedSize;
+	RingBuffer mRecvBuffer;
+	char mTempRecvBuf[MAX_SOCKBUF];
 
 	// Send
 	OverlappedEx mSendOverlappedEx;

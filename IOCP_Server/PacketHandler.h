@@ -6,13 +6,13 @@
 
 using namespace std;
 
-struct ClientSession;
+class ClientSession;
 class IOCPServer;
 
 class PacketHandler
 {
 public:
-	static void ProcessPacket(ClientSession* session, DWORD dataSize, SessionManager* sessionManager);
+	static void ProcessPacket(ClientSession* session, SessionManager* sessionManager);
 
 private:
 	static void HandleLogin(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);

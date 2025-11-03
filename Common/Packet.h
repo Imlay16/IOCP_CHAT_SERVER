@@ -35,6 +35,8 @@ enum class PacketType : UINT16
 
 	USER_JOIN_NOTIFY = 5001,
 	USER_LEAVE_NOTIFY = 5002,
+
+	NONE = 0,
 };
 
 enum class ErrorCode : UINT16
@@ -62,6 +64,7 @@ struct PacketHeader
 	PacketType type;
 	UINT16 size;
 
+	PacketHeader() : type(PacketType::NONE), size(0) {}
 	PacketHeader(PacketType packetType) : type(packetType), size(0) {}
 	PacketHeader(PacketType packetType, UINT16 packetSize) : type(packetType), size(packetSize) {}
 	void SetSize(UINT16 packetSize) { size = packetSize; }
