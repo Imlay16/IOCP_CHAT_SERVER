@@ -30,16 +30,16 @@ private:
     SOCKET mListenSocket;
     HANDLE mIOCPHandle;
     vector<thread> mIOWorkerThreads;
-    thread mAccepterThread;
+    thread mAcceptThread;
 
     SessionManager* mSessionManager;
 
     UINT32 mSessionIdCounter;
     bool mIsWorkerRun;
-    bool mIsAccepterRun;
+    bool mIsAcceptRun;
 
     void WorkerThread();
-    void AccepterThread();
+    void AcceptThread();
 
     bool BindIOCompletionPort(ClientSession* session);
     UINT32 GenerateSessionId() { return mSessionIdCounter++; }

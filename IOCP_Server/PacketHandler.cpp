@@ -46,7 +46,7 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 				}
 				else
 				{
-					HandleWhispher(session, fullHeader, sessionManager);
+					HandleWhisper(session, fullHeader, sessionManager);
 				}
 			}
 			else
@@ -114,7 +114,7 @@ void PacketHandler::HandleBroadcast(ClientSession* session, PacketHeader* header
 	sessionManager->BroadcastPacket(session, (char*)&resPacket, sizeof(resPacket));
 }
 
-void PacketHandler::HandleWhispher(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
+void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
 {
 	if (header->GetSize() != sizeof(WhisperChatReqPacket))
 	{
@@ -132,7 +132,7 @@ void PacketHandler::HandleWhispher(ClientSession* session, PacketHeader* header,
 	if (targetSession != nullptr)
 	{
 		resPacket.result = ErrorCode::SUCCESS;
-		resPacket.SetMessage(session->GetUsername().c_str(), packet->GetMessageW());
+		resPacket.SetMessage(session->GetUsername().c_str(), packet->GetMsg());
 		targetSession->SendPacket((char*)&resPacket, sizeof(resPacket));
 	}
 	else

@@ -85,10 +85,10 @@ public:
 		dataSize -= len;
 	}
 
-	size_t GetFreeSize() const { return buffer.size() - dataSize - 1; }
+	size_t GetFreeSize() const { return buffer.size() - dataSize; }
 	size_t GetDataSize() const { return dataSize; }
 	bool IsEmpty() const { return dataSize == 0; }
-	bool IsFull() const { return buffer.size() >= dataSize - 1; }
+	bool IsFull() const { return buffer.size() == dataSize; }
 
 private:
 	vector<char> buffer;

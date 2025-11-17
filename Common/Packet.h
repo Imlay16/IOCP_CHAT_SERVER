@@ -68,8 +68,8 @@ struct PacketHeader
 	PacketHeader(PacketType packetType) : type(packetType), size(0) {}
 	PacketHeader(PacketType packetType, UINT16 packetSize) : type(packetType), size(packetSize) {}
 	void SetSize(UINT16 packetSize) { size = packetSize; }
-	UINT16 GetSize() { return size; }
-	PacketType GetType() { return type; }
+	UINT16 GetSize() const { return size; }
+	PacketType GetType() const { return type; }
 };
 
 struct LoginReqPacket : PacketHeader
@@ -210,7 +210,7 @@ struct WhisperChatReqPacket : PacketHeader
 
 	// void SetResult(ErrorCode error) { result = error; }
 	const char* GetReceiver() { return receiver; }
-	const char* GetMessage() { return message; }
+	const char* GetMsg() { return message; }
 };
 
 struct WhisperChatResPacket : PacketHeader

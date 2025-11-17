@@ -134,9 +134,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\Common\Packet.h" />
     <ClInclude Include="ClientSession.h" />
     <ClInclude Include="IOCPServer.h" />
-    <ClInclude Include="Packet.h" />
     <ClInclude Include="PacketHandler.h" />
     <ClInclude Include="RedisManager.h" />
     <ClInclude Include="RingBuffer.h" />

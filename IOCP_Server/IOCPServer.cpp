@@ -6,7 +6,7 @@ IOCPServer::IOCPServer()
 	, mSessionManager(nullptr)
 	, mSessionIdCounter(1)
 	, mIsWorkerRun(true)
-	, mIsAccepterRun(true)
+	, mIsAcceptRun(true)
 {
 }
 
@@ -80,7 +80,7 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 		mIOWorkerThreads.emplace_back([this]() { WorkerThread(); });
 	}
 
-	mAccepterThread = thread([this]() { AccepterThread(); });
+	mAcceptThread = thread([this]() { AcceptThread(); });
 
 	cout << "[IOCPServer] Server startew with " << MAX_WORKERTHREAD << " worker threads" << endl;
 	return true;
@@ -104,14 +104,14 @@ void IOCPServer::DestroyThread()
 		}
 	}
 
-	mIsAccepterRun = false;
+	mIsAcceptRun = false;
 	if (mListenSocket != INVALID_SOCKET)
 	{
 		closesocket(mListenSocket);
 	}
 
-	if (mAccepterThread.joinable()) {
-		mAccepterThread.join();
+	if (mAcceptThread.joinable()) {
+		mAcceptThread.join();
 	}
 
 	cout << "[IOCPServer] All threads destroyed" << endl;
@@ -151,6 +151,7 @@ void IOCPServer::WorkerThread()
 			INFINITE
 		);
 
+		// 클라이언트 종료 시, 처리
 		if (!success || transferred == 0)
 		{
 			if (session && session->IsValid())
@@ -184,12 +185,12 @@ void IOCPServer::WorkerThread()
 	}
 }
 
-void IOCPServer::AccepterThread()
+void IOCPServer::AcceptThread()
 {
 	SOCKADDR_IN clientAddr;
 	int addrLen = sizeof(clientAddr);
 
-	while (mIsAccepterRun)
+	while (mIsAcceptRun)
 	{
 		ClientSession* session = mSessionManager->GetEmptySession();
 		if (session == nullptr)

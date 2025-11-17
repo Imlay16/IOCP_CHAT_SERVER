@@ -17,7 +17,7 @@ public:
 private:
 	static void HandleLogin(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
 	static void HandleBroadcast(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
-	static void HandleWhispher(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
+	static void HandleWhisper(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
 
 	static bool CheckUserCredentials(const char* userId, const char* userPw);
 
