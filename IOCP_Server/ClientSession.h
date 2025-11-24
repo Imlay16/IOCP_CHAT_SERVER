@@ -87,5 +87,7 @@ private:
 	queue<vector<char>> mSendQueue;
 	bool mIsSending;
 	SRWLOCK mSendLock;
+
+	DWORD mLastRecvTime;
 };
 

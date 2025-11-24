@@ -7,6 +7,7 @@ IOCPServer::IOCPServer()
 	, mSessionIdCounter(1)
 	, mIsWorkerRun(true)
 	, mIsAcceptRun(true)
+	, mIsHeartbeatRun(true)
 {
 }
 
@@ -81,6 +82,7 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	}
 
 	mAcceptThread = thread([this]() { AcceptThread(); });
+	mHeartBeatThread = thread([this]() { HeartBeatThread(); });
 
 	cout << "[IOCPServer] Server startew with " << MAX_WORKERTHREAD << " worker threads" << endl;
 	return true;
@@ -112,6 +114,12 @@ void IOCPServer::DestroyThread()
 
 	if (mAcceptThread.joinable()) {
 		mAcceptThread.join();
+	}
+
+	mIsHeartBeatRun = false;
+	if (mHeartBeatThread.joinable())
+	{
+		mHeartBeatThread.join();
 	}
 
 	cout << "[IOCPServer] All threads destroyed" << endl;
@@ -151,15 +159,24 @@ void IOCPServer::WorkerThread()
 			INFINITE
 		);
 
-		// 클라이언트 종료 시, 처리
 		if (!success || transferred == 0)
 		{
-			if (session && session->IsValid())
+			if (!success)
+			{
+				DWORD err = GetLastError();
+				cout << "Abnormal Disconnect (Error: " << err << ")" << endl;
+			}
+			else
+			{
+				cout << "Normal Disconnect (FIN received)" << endl;
+			}
+
+			if (session->IsValid())
 			{
 				cout << "[IOCPServer] Client disconnected. Session ID: " << session->GetSessionId() << endl;
 				mSessionManager->UnregisterSession(session);
-				session->Reset();
 			}
+
 			continue;
 		}
 
@@ -175,7 +192,6 @@ void IOCPServer::WorkerThread()
 			{
 				cout << "[IOCP Server] RegisterRecv failed! Session: " << session->GetSessionId() << endl;
 				mSessionManager->UnregisterSession(session);
-				session->Reset();
 			}			
 		}
 		else if (overlappedEx->operation == IOOperation::SEND)
@@ -225,5 +241,17 @@ void IOCPServer::AcceptThread()
 		cout << "[IOCPServer] Client connected - Session ID: " << sessionId
 			<< ", IP: " << clientIP
 			<< ", Socket: " << clientSocket << std::endl;
+	}
+}
+
+void IOCPServer::HeartbeatThread()
+{
+	while (mIsHeartbeatRun)
+	{
+		Sleep(5000);
+
+		time_t now = time(nullptr);
+
+		// mSessionManager.CheckHeartbeat(now);
 	}
 }

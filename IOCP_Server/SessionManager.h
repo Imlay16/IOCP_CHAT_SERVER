@@ -1,6 +1,7 @@
 #pragma once
 #include "ClientSession.h"
 #include <vector>
+#include <stack>
 #include <unordered_map>
 #include <Windows.h>
 
@@ -23,7 +24,11 @@ public:
 	int GetActiveSessionCount() const { return mActiveSessionCount; }
 
 private:
-	vector<ClientSession> mSessions;
+	vector<ClientSession> mSessionContainer;
+	stack<int> mSessionIndexes;
+
+	// vector<ClientSession> mSessions;
+
 	unordered_map<string, UINT32> mSessionIdByName;
 	unordered_map<UINT32, ClientSession*> mSessionById;
 

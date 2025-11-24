@@ -9,7 +9,7 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 
 	while (true)
 	{
-		PacketHeader header;
+		PacketHeader header;                         
 
 		if (!recvBuffer.Peek((char*)&header, sizeof(PacketHeader)))
 		{
@@ -22,6 +22,14 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 		if (recvBuffer.GetDataSize() < packetSize)
 		{
 			// cout << "[PacketHandler] Waiting for body... (need " << packetSize << ", has" << recvBuffer.GetDataSize() << ")" << endl;
+			break;
+		}
+
+		// 만약 패킷이 최대 크기를 넘는다면,
+		if (packetSize > MAX_PACKET_SIZE)
+		{
+			// 세션 정리하고 반납하기
+			sessionManager->UnregisterSession(session);
 			break;
 		}
 

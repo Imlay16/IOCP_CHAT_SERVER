@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 
+const UINT16 MAX_PACKET_SIZE = 2048;
 const UINT16 MAX_CHAT_SIZE = 1024;
 const UINT8 MAX_USER_ID = 32;
 const UINT8 MAX_USER_PW = 32;
@@ -36,6 +37,9 @@ enum class PacketType : UINT16
 	USER_JOIN_NOTIFY = 5001,
 	USER_LEAVE_NOTIFY = 5002,
 
+	HEART_BEAT_REQUEST = 6001,
+	HEART_BEAT_RESPONSE = 6002,
+
 	NONE = 0,
 };
 
@@ -64,26 +68,40 @@ struct PacketHeader
 	PacketType type;
 	UINT16 size;
 
-	PacketHeader() : type(PacketType::NONE), size(0) {}
-	PacketHeader(PacketType packetType) : type(packetType), size(0) {}
-	PacketHeader(PacketType packetType, UINT16 packetSize) : type(packetType), size(packetSize) {}
+	PacketHeader() : type(PacketType::NONE), size(0)
+	{
+	}
+
+	PacketHeader(PacketType packetType) : type(packetType), size(sizeof(0))
+	{
+		// 생성 시 자동으로 크기 설정
+	}
+
 	void SetSize(UINT16 packetSize) { size = packetSize; }
 	UINT16 GetSize() const { return size; }
 	PacketType GetType() const { return type; }
 };
 
-struct LoginReqPacket : PacketHeader
+template<typename T>
+struct PacketBase : PacketHeader
+{
+	PacketBase(PacketType type) : PacketHeader(type)
+	{
+		this->size = static_cast<UINT16>(sizeof(T));
+	}
+};
+
+struct LoginReqPacket : PacketBase<LoginReqPacket>
 {
 	char userId[MAX_USER_ID + 1];
 	char password[MAX_USER_PW + 1];
 	char username[MAX_USER_NAME + 1];
 
-	LoginReqPacket() : PacketHeader(PacketType::LOGIN_REQUEST)
+	LoginReqPacket() : PacketBase(PacketType::LOGIN_REQUEST)
 	{
 		memset(userId, 0, sizeof(userId));
 		memset(password, 0, sizeof(password));
 		memset(username, 0, sizeof(username));
-		SetSize(sizeof(*this));
 	}
 
 	void SetLoginInfo(const char* user, const char* pw, const char* name)
@@ -95,24 +113,23 @@ struct LoginReqPacket : PacketHeader
 	}
 };
 
-struct LoginResPacket : PacketHeader
+struct LoginResPacket : PacketBase<LoginResPacket>
 {
 	ErrorCode result;
 
-	LoginResPacket() : PacketHeader(PacketType::LOGIN_RESPONSE)
+	LoginResPacket() : PacketBase(PacketType::LOGIN_RESPONSE)
 	{
-		SetSize(sizeof(*this));
+
 	}
 };
 
-struct BroadcastReqPacket : PacketHeader
+struct BroadcastReqPacket : PacketBase<BroadcastReqPacket>
 {
 	char message[MAX_CHAT_SIZE + 1];
 
-	BroadcastReqPacket() : PacketHeader(PacketType::BROADCAST_REQUEST)
+	BroadcastReqPacket() : PacketBase(PacketType::BROADCAST_REQUEST)
 	{
 		memset(message, 0, sizeof(message));
-		SetSize(sizeof(*this));
 	}
 
 	void SetMessage(const char* msg)
@@ -122,17 +139,15 @@ struct BroadcastReqPacket : PacketHeader
 	}
 };
 
-struct BroadcastResPacket : PacketHeader
+struct BroadcastResPacket : PacketBase<BroadcastResPacket>
 {
-	// Res할 땐, username 필요! 누가 보냈는지를 명시해야함
 	char user[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	BroadcastResPacket() : PacketHeader(PacketType::BROADCAST_RESPONSE)
+	BroadcastResPacket() : PacketBase(PacketType::BROADCAST_RESPONSE)
 	{
 		memset(user, 0, sizeof(user));
 		memset(message, 0, sizeof(message));
-		SetSize(sizeof(*this));
 	}
 
 	void SetUser(const char* name)
@@ -148,31 +163,28 @@ struct BroadcastResPacket : PacketHeader
 	}
 };
 
-struct RoomChatReqPacket : PacketHeader
+struct RoomChatReqPacket : PacketBase<RoomChatReqPacket>
 {
 	char message[MAX_CHAT_SIZE + 1];
 
-	RoomChatReqPacket() : PacketHeader(PacketType::ROOM_CHAT_REQUEST)
+	RoomChatReqPacket() : PacketBase(PacketType::ROOM_CHAT_REQUEST)
 	{
 		memset(message, 0, sizeof(message));
-		SetSize(sizeof(*this));
 	}
 
 	void SetMessage(const char* msg)
 	{
 		if (!msg) return;
-
 		strcpy_s(message, sizeof(message), msg);
-		SetSize(sizeof(*this));
 	}
 };
 
-struct RoomChatResPacket : PacketHeader
+struct RoomChatResPacket : PacketBase<RoomChatResPacket>
 {
 	char user[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	RoomChatResPacket() : PacketHeader(PacketType::ROOM_CHAT_RESPONSE)
+	RoomChatResPacket() : PacketBase(PacketType::ROOM_CHAT_RESPONSE)
 	{
 		memset(user, 0, sizeof(user));
 		memset(message, 0, sizeof(message));
@@ -184,20 +196,18 @@ struct RoomChatResPacket : PacketHeader
 
 		strcpy_s(user, sizeof(user), name);
 		strcpy_s(message, sizeof(message), msg);
-		SetSize(sizeof(*this));
 	}
 };
 
-struct WhisperChatReqPacket : PacketHeader
+struct WhisperChatReqPacket : PacketBase<WhisperChatReqPacket>
 {
 	char receiver[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	WhisperChatReqPacket() : PacketHeader(PacketType::WHISPER_REQUEST)
+	WhisperChatReqPacket() : PacketBase(PacketType::WHISPER_REQUEST)
 	{
 		memset(receiver, 0, sizeof(receiver));
 		memset(message, 0, sizeof(message));
-		SetSize(sizeof(*this));
 	}
 
 	void SetWhisper(const char* receiverName, const char* msg)
@@ -205,7 +215,6 @@ struct WhisperChatReqPacket : PacketHeader
 		if (!receiverName || !msg) return;
 		strcpy_s(receiver, sizeof(receiver), receiverName);
 		strcpy_s(message, sizeof(message), msg);
-		SetSize(sizeof(*this));
 	}
 
 	// void SetResult(ErrorCode error) { result = error; }
@@ -213,17 +222,16 @@ struct WhisperChatReqPacket : PacketHeader
 	const char* GetMsg() { return message; }
 };
 
-struct WhisperChatResPacket : PacketHeader
+struct WhisperChatResPacket : PacketBase<WhisperChatResPacket>
 {
 	ErrorCode result;
 	char sender[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	WhisperChatResPacket() : PacketHeader(PacketType::WHISPER_RESPONSE)
+	WhisperChatResPacket() : PacketBase(PacketType::WHISPER_RESPONSE)
 	{		
 		memset(sender, 0, sizeof(sender));
 		memset(message, 0, sizeof(message));
-		SetSize(sizeof(*this));
 	}
 
 	void SetMessage(const char* user, const char* msg)
@@ -238,13 +246,12 @@ struct WhisperChatResPacket : PacketHeader
 	const char* GetSender() { return sender; }
 };
 
-struct UserJoinNotifyPacket : PacketHeader
+struct UserJoinNotifyPacket : PacketBase<UserJoinNotifyPacket>
 {
 	char user[MAX_USER_NAME + 1];
-	UserJoinNotifyPacket() : PacketHeader(PacketType::USER_JOIN_NOTIFY, sizeof(*this))
+	UserJoinNotifyPacket() : PacketBase(PacketType::USER_JOIN_NOTIFY)
 	{
 		memset(user, 0, sizeof(user));
-		SetSize(sizeof(*this));
 	}
 
 	void SetUser(const char* name)
@@ -253,13 +260,12 @@ struct UserJoinNotifyPacket : PacketHeader
 	}
 };
 
-struct UserLeaveNotifyPacket : PacketHeader
+struct UserLeaveNotifyPacket : PacketBase<UserLeaveNotifyPacket>
 {
 	char user[MAX_USER_NAME + 1];
-	UserLeaveNotifyPacket() : PacketHeader(PacketType::USER_LEAVE_NOTIFY, sizeof(*this))
+	UserLeaveNotifyPacket() : PacketBase(PacketType::USER_LEAVE_NOTIFY)
 	{
 		memset(user, 0, sizeof(user));
-		SetSize(sizeof(*this));
 	}
 
 	void SetUser(const char* name)
@@ -268,7 +274,7 @@ struct UserLeaveNotifyPacket : PacketHeader
 	}
 };
 
-struct CreateRoomReqPacket : PacketHeader
+struct CreateRoomReqPacket : PacketBase<CreateRoomReqPacket>
 {
 	UINT8 roomNum;
 	UINT8 maxUser;
@@ -281,7 +287,7 @@ struct CreateRoomReqPacket : PacketHeader
 	// 비밀번호
 	// 만약 비밀방이 아니면, PW를 입력X
 
-	CreateRoomReqPacket() : PacketHeader(PacketType::ROOM_CREATE_REQUEST) {}
+	CreateRoomReqPacket() : PacketBase(PacketType::ROOM_CREATE_REQUEST) {}
 
 	void CreateRoom(UINT8 roomNum, UINT8 maxUser, bool isPrivate, const char* pw)
 	{
@@ -292,58 +298,57 @@ struct CreateRoomReqPacket : PacketHeader
 	}
 };
 
-struct CreateRoomResPacket : PacketHeader
+struct CreateRoomResPacket : PacketBase<CreateRoomResPacket>
 {
 	ErrorCode result;
 
-	CreateRoomResPacket() : PacketHeader(PacketType::ROOM_CREATE_RESPONSE)
+	CreateRoomResPacket() : PacketBase(PacketType::ROOM_CREATE_RESPONSE)
 	{
-		SetSize(sizeof(*this));
+
 	}
 };
 
-struct JoinRoomReqPacket : PacketHeader
+struct JoinRoomReqPacket : PacketBase<JoinRoomReqPacket>
 {
 	UINT8 roomNum;
 
-	JoinRoomReqPacket() : PacketHeader(PacketType::ROOM_JOIN_REQUEST) {}
+	JoinRoomReqPacket() : PacketBase(PacketType::ROOM_JOIN_REQUEST) {}
 
 	void SetRoom(UINT8 roomNum)
 	{
 		this->roomNum = roomNum;
-		SetSize(sizeof(*this));
 	}
 };
 
-struct JoinRoomResPacket : PacketHeader
+struct JoinRoomResPacket : PacketBase<JoinRoomResPacket>
 {
 	ErrorCode result;
 	char user[MAX_USER_NAME + 1];
 
-	JoinRoomResPacket() : PacketHeader(PacketType::ROOM_JOIN_RESPONSE, sizeof(*this)) {}
+	JoinRoomResPacket() : PacketBase(PacketType::ROOM_JOIN_RESPONSE) {}
 };
 
-struct RoomLeaveReqPacket : PacketHeader
+struct RoomLeaveReqPacket : PacketBase<RoomLeaveReqPacket>
 {
-	RoomLeaveReqPacket() : PacketHeader(PacketType::ROOM_LEAVE_REQUEST) {}
+	RoomLeaveReqPacket() : PacketBase(PacketType::ROOM_LEAVE_REQUEST) {}
 };
 
-struct RoomLeaveResPacket : PacketHeader
+struct RoomLeaveResPacket : PacketBase<RoomLeaveResPacket>
 {
 	ErrorCode result;
 	char user[MAX_USER_NAME + 1];
 
-	RoomLeaveResPacket() : PacketHeader(PacketType::ROOM_LEAVE_RESPONSE) 
+	RoomLeaveResPacket() : PacketBase(PacketType::ROOM_LEAVE_RESPONSE)
 	{
-		SetSize(sizeof(*this));
+
 	}
 };
 
-struct RoomListReqPacket : PacketHeader
+struct RoomListReqPacket : PacketBase<RoomListReqPacket>
 {
-	RoomListReqPacket() : PacketHeader(PacketType::ROOM_LIST_REQUEST) 
+	RoomListReqPacket() : PacketBase(PacketType::ROOM_LIST_REQUEST)
 	{
-		SetSize(sizeof(*this));
+
 	}
 
 	void SetRoom(UINT8 room)
@@ -352,7 +357,7 @@ struct RoomListReqPacket : PacketHeader
 	}
 };
 
-struct RoomListResPacket : PacketHeader
+struct RoomListResPacket : PacketBase<RoomListResPacket>
 {
 	ErrorCode result;
 	// UINT8 roomNum;
@@ -361,9 +366,9 @@ struct RoomListResPacket : PacketHeader
 	// 방 정보들 (CURRENT_USER_COUNT / FULL COUNT)
 	// 비밀번호 있는 방인지 없는 방인지 등등
 
-	RoomListResPacket() : PacketHeader(PacketType::ROOM_LIST_RESPONSE)
+	RoomListResPacket() : PacketBase(PacketType::ROOM_LIST_RESPONSE)
 	{
-		SetSize(sizeof(*this));
+
 	}
 
 	void SetRoom(UINT8 room)

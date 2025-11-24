@@ -12,6 +12,7 @@
 #include "PacketHandler.h"
 
 #define MAX_WORKERTHREAD 4
+#define KEEP_ALIVE_TIMEOUT 60
 
 using namespace std;
 
@@ -31,15 +32,18 @@ private:
     HANDLE mIOCPHandle;
     vector<thread> mIOWorkerThreads;
     thread mAcceptThread;
+    thread mHeartBeatThread;
 
     SessionManager* mSessionManager;
 
     UINT32 mSessionIdCounter;
     bool mIsWorkerRun;
     bool mIsAcceptRun;
+    bool mIsHeartBeatRun;
 
     void WorkerThread();
     void AcceptThread();
+    void HeartBeatThread();
 
     bool BindIOCompletionPort(ClientSession* session);
     UINT32 GenerateSessionId() { return mSessionIdCounter++; }

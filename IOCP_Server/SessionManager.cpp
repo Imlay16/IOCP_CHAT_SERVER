@@ -6,27 +6,32 @@ SessionManager::SessionManager(UINT32 maxSessionCount) : mActiveSessionCount(0)
 {
 	InitializeSRWLock(&mSrwLock);
 
-	mSessions.reserve(maxSessionCount);
-	for (UINT32 i = 0; i < maxSessionCount; i++)
+	mSessionContainer.reserve(maxSessionCount);
+
+	for (UINT32 i = 0; i < maxSessionCount; ++i)
 	{
-		mSessions.emplace_back();
-	}
+		mSessionContainer.emplace_back();
+		mSessionIndexes.push(i);
+	}	
 }
 
 SessionManager::~SessionManager() { }
 
-// GetEmptySession 찾는 것 O(1)로 하는 법은?
-
 ClientSession* SessionManager::GetEmptySession()
 {
-	for (auto& session : mSessions)
+	SRWLockGuard lock(&mSrwLock, true);
+
+	ClientSession* client = nullptr;
+
+	if (!mSessionIndexes.empty())
 	{
-		if (!session.IsValid())
-		{
-			return &session;
-		}
+		int idx = mSessionIndexes.top();
+		mSessionIndexes.pop();
+
+		client = &mSessionContainer[idx];	 
 	}
-	return nullptr;
+	
+	return client;
 }
 
 ClientSession* SessionManager::FindSessionByName(const string& name)
@@ -69,8 +74,13 @@ void SessionManager::UnregisterSession(ClientSession* session)
 {
 	SRWLockGuard lock(&mSrwLock);
 
+	// ClientSession 초기화
+	session->Reset();
+	mSessionIndexes.push(session - &mSessionContainer[0]);
+
 	mSessionIdByName.erase(session->GetUsername());
 	mSessionById.erase(session->GetSessionId());
+	
 	mActiveSessionCount--;
 }
 
@@ -78,7 +88,7 @@ void SessionManager::BroadcastPacket(ClientSession* excludeSession, const char* 
 {
 	SRWLockGuard lock(&mSrwLock);
 
-	for (auto& session : mSessions)
+	for (auto& session : mSessionContainer)
 	{
 		if (session.IsValid() && &session != excludeSession)
 		{
