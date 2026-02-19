@@ -1,14 +1,15 @@
 #include "IOCPServer.h"
 
-IOCPServer::IOCPServer() 
+IOCPServer::IOCPServer(RedisManager* redis) 
 	: mListenSocket(INVALID_SOCKET)
 	, mIOCPHandle(nullptr)
 	, mSessionManager(nullptr)
+	, mRedis(redis)
 	, mSessionIdCounter(1)
 	, mIsWorkerRun(true)
 	, mIsAcceptRun(true)
-	, mIsHeartbeatRun(true)
 {
+	mPacketHandler = new PacketHandler(redis);
 }
 
 IOCPServer::~IOCPServer()
@@ -17,6 +18,9 @@ IOCPServer::~IOCPServer()
 
 	delete mSessionManager;
 	mSessionManager = nullptr;
+
+	delete mPacketHandler;
+	mPacketHandler = nullptr;
 
 	WSACleanup();
 }
@@ -82,7 +86,6 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	}
 
 	mAcceptThread = thread([this]() { AcceptThread(); });
-	mHeartBeatThread = thread([this]() { HeartBeatThread(); });
 
 	cout << "[IOCPServer] Server startew with " << MAX_WORKERTHREAD << " worker threads" << endl;
 	return true;
@@ -114,12 +117,6 @@ void IOCPServer::DestroyThread()
 
 	if (mAcceptThread.joinable()) {
 		mAcceptThread.join();
-	}
-
-	mIsHeartBeatRun = false;
-	if (mHeartBeatThread.joinable())
-	{
-		mHeartBeatThread.join();
 	}
 
 	cout << "[IOCPServer] All threads destroyed" << endl;
@@ -173,6 +170,13 @@ void IOCPServer::WorkerThread()
 
 			if (session->IsValid())
 			{
+				if (session->IsAuthenticated())
+				{
+					mRedis->DeleteSession(session->GetToken());
+					mRedis->RemoveOnlineStatus(session->GetUsername());
+					cout << "[Redis] Cleaned session: " << session->GetUsername() << endl;
+				}
+
 				cout << "[IOCPServer] Client disconnected. Session ID: " << session->GetSessionId() << endl;
 				mSessionManager->UnregisterSession(session);
 			}
@@ -186,11 +190,18 @@ void IOCPServer::WorkerThread()
 		{
 			session->GetRecvBuffer().Write(session->GetTempRecvBuf(), transferred);
 
-			PacketHandler::ProcessPacket(session, mSessionManager);
+			mPacketHandler->ProcessPacket(session, mSessionManager); 
 			
 			if (!session->RegisterRecv())
 			{
 				cout << "[IOCP Server] RegisterRecv failed! Session: " << session->GetSessionId() << endl;
+
+				if (session->IsAuthenticated())
+				{
+					mRedis->DeleteSession(session->GetToken());
+					mRedis->RemoveOnlineStatus(session->GetUsername());
+				}
+
 				mSessionManager->UnregisterSession(session);
 			}			
 		}
@@ -241,17 +252,5 @@ void IOCPServer::AcceptThread()
 		cout << "[IOCPServer] Client connected - Session ID: " << sessionId
 			<< ", IP: " << clientIP
 			<< ", Socket: " << clientSocket << std::endl;
-	}
-}
-
-void IOCPServer::HeartbeatThread()
-{
-	while (mIsHeartbeatRun)
-	{
-		Sleep(5000);
-
-		time_t now = time(nullptr);
-
-		// mSessionManager.CheckHeartbeat(now);
 	}
 }

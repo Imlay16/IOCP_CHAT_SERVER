@@ -50,11 +50,12 @@ void ClientSession::Reset()
 		shutdown(mSocket, SD_BOTH);
 		closesocket(mSocket);
 		mSocket = INVALID_SOCKET;
-	}	
+	}		
 
 	mSessionId = 0;
 	mState = SessionState::DISCONNECTING;
 	mUsername.clear();
+	mToken.clear();
 
 	while (!mSendQueue.empty())
 	{

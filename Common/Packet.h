@@ -37,8 +37,7 @@ enum class PacketType : UINT16
 	USER_JOIN_NOTIFY = 5001,
 	USER_LEAVE_NOTIFY = 5002,
 
-	HEART_BEAT_REQUEST = 6001,
-	HEART_BEAT_RESPONSE = 6002,
+	HEART_BEAT = 6000,
 
 	NONE = 0,
 };
@@ -58,6 +57,14 @@ enum class ErrorCode : UINT16
 	ALREADY_IN_ROOM = 1008,
 	PERMISSION_DENIED = 1009,
 
+	ID_ALREADY_EXISTS = 1010,
+	ID_INVALID = 1011,
+
+	PW_INVALID = 1012,
+	WRONG_PASSWORD = 1013,
+
+	ALREADY_LOGGED_IN = 1014,
+
 	SERVER_ERROR = 9999
 };
 
@@ -74,7 +81,6 @@ struct PacketHeader
 
 	PacketHeader(PacketType packetType) : type(packetType), size(sizeof(0))
 	{
-		// 생성 시 자동으로 크기 설정
 	}
 
 	void SetSize(UINT16 packetSize) { size = packetSize; }
@@ -89,6 +95,19 @@ struct PacketBase : PacketHeader
 	{
 		this->size = static_cast<UINT16>(sizeof(T));
 	}
+};
+
+struct RegisterReqPacket : PacketBase<RegisterReqPacket>
+{
+	char userId[MAX_USER_ID + 1];
+	char password[MAX_USER_PW + 1];
+	
+	
+};
+
+struct RegisterResPacket : PacketBase<RegisterResPacket>
+{
+	ErrorCode result;
 };
 
 struct LoginReqPacket : PacketBase<LoginReqPacket>
@@ -276,22 +295,14 @@ struct UserLeaveNotifyPacket : PacketBase<UserLeaveNotifyPacket>
 
 struct CreateRoomReqPacket : PacketBase<CreateRoomReqPacket>
 {
-	UINT8 roomNum;
 	UINT8 maxUser;
 	bool isPrivate;
 	char roomPassword[MAX_ROOM_PW + 1];
-
-	// 방 설정 정보
-	// 최대 인원
-	// 비밀번호 유무
-	// 비밀번호
-	// 만약 비밀방이 아니면, PW를 입력X
 
 	CreateRoomReqPacket() : PacketBase(PacketType::ROOM_CREATE_REQUEST) {}
 
 	void CreateRoom(UINT8 roomNum, UINT8 maxUser, bool isPrivate, const char* pw)
 	{
-		this->roomNum = roomNum;
 		this->maxUser = maxUser;
 		this->isPrivate = isPrivate;
 		strcpy_s(roomPassword, MAX_ROOM_PW + 1, pw);
@@ -299,12 +310,11 @@ struct CreateRoomReqPacket : PacketBase<CreateRoomReqPacket>
 };
 
 struct CreateRoomResPacket : PacketBase<CreateRoomResPacket>
-{
+{	
 	ErrorCode result;
 
 	CreateRoomResPacket() : PacketBase(PacketType::ROOM_CREATE_RESPONSE)
 	{
-
 	}
 };
 
@@ -376,4 +386,10 @@ struct RoomListResPacket : PacketBase<RoomListResPacket>
 		// roomNum = room;
 	}
 };
+
+struct HeartbeatPacket : PacketBase<HeartbeatPacket>
+{
+	HeartbeatPacket() : PacketBase(PacketType::HEART_BEAT) { }	
+};
+
 #pragma pack(pop)

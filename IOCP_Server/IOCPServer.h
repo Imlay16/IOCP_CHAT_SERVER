@@ -19,7 +19,7 @@ using namespace std;
 class IOCPServer
 {
 public:
-    IOCPServer();
+    IOCPServer(RedisManager* redis);
     ~IOCPServer();
 
     bool InitSocket();
@@ -32,18 +32,17 @@ private:
     HANDLE mIOCPHandle;
     vector<thread> mIOWorkerThreads;
     thread mAcceptThread;
-    thread mHeartBeatThread;
 
     SessionManager* mSessionManager;
+    RedisManager* mRedis;
+    PacketHandler* mPacketHandler;
 
     UINT32 mSessionIdCounter;
     bool mIsWorkerRun;
     bool mIsAcceptRun;
-    bool mIsHeartBeatRun;
 
     void WorkerThread();
     void AcceptThread();
-    void HeartBeatThread();
 
     bool BindIOCompletionPort(ClientSession* session);
     UINT32 GenerateSessionId() { return mSessionIdCounter++; }

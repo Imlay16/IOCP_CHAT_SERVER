@@ -1,5 +1,6 @@
 #include "PacketHandler.h"
 #include <iostream>
+#include <random>
 
 using namespace std;
 
@@ -74,6 +75,24 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 	}
 }
 
+string GenerateToken()
+{
+	static const char charset[] = "0123456789abcdef";
+	string token;
+	token.reserve(32);
+
+	random_device rd;
+	mt19937 gen(rd());
+	uniform_int_distribution<> dis(0, 15);
+
+	for (int i = 0; i < 32; ++i)
+	{
+		token += charset[dis(gen)];
+	}
+
+	return token;
+}
+
 void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
 {
 	if (header->GetSize() != sizeof(LoginReqPacket))
@@ -83,24 +102,55 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 	}
 
 	LoginReqPacket* packet = (LoginReqPacket*)header;
-	bool isValid = CheckUserCredentials(packet->userId, packet->password);
+
+	std::string storedPassword = mRedis->GetUserPassword(packet->userId);
 
 	LoginResPacket resPacket;
 
-	if (isValid)
+	if (storedPassword.empty())
 	{
-		session->SetState(SessionState::AUTHENTICATED);
-		session->SetUsername(packet->username);
-		sessionManager->RegisterSession(session);
+		resPacket.result = ErrorCode::USER_NOT_FOUND;
+		cout << "[PacketHandler] Login failed - User not found: " << packet->userId << endl;
+		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+		return;
+	}
 
-		resPacket.result = ErrorCode::SUCCESS;
-		cout << "[PacketHandler] Login success: " << packet->username << endl;
-	}
-	else
+	if (storedPassword != packet->password)
 	{
-		resPacket.result = ErrorCode::AUTH_FAILED;
-		cout << "[PacketHandler] Login failed: " << packet->userId << endl;
+		resPacket.result = ErrorCode::WRONG_PASSWORD;
+		cout << "[PacketHandler] Login failed - Wrong password: " << packet->userId << endl;
+		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+		return;
 	}
+
+	if (sessionManager->FindSessionByName(packet->username) != nullptr)
+	{
+		resPacket.result = ErrorCode::ALREADY_LOGGED_IN;
+		cout << "[PacketHandler] Login failed - Already logged in: " << packet->username << endl;
+		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+		return;
+	}
+
+	string token = GenerateToken();
+
+	if (!mRedis->CreateSession(token, packet->userId, 1800))
+	{
+		resPacket.result = ErrorCode::SERVER_ERROR;
+		cout << "[PacketHandler] Login failed - Session creation error" << endl;
+		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+		return;
+	}
+
+	mRedis->SetOnlineStatus(packet->username, session->GetSessionId());
+
+	session->SetState(SessionState::AUTHENTICATED);
+	session->SetUsername(packet->username);
+	session->SetToken(token);
+
+	sessionManager->RegisterSession(session);
+
+	resPacket.result = ErrorCode::SUCCESS;
+	cout << "[PacketHandler] Login success: " << packet->username << " (token: " << token.substr(0, 8) << "...)" << endl;
 
 	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
@@ -150,9 +200,4 @@ void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header, 
 			"User '%s' not found", packet->receiver);
 		session->SendPacket((char*)&resPacket, sizeof(resPacket));
 	}
-}
-
-bool PacketHandler::CheckUserCredentials(const char* userId, const char* password)
-{
-	return true;
 }

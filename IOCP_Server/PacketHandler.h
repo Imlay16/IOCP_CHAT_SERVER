@@ -3,6 +3,7 @@
 #include "ClientSession.h"
 #include "SessionManager.h"
 #include "../Common/Packet.h"
+#include "RedisManager.h"
 
 using namespace std;
 
@@ -12,14 +13,16 @@ class IOCPServer;
 class PacketHandler
 {
 public:
-	static void ProcessPacket(ClientSession* session, SessionManager* sessionManager);
+	PacketHandler(RedisManager* redis) : mRedis(redis) { }
+
+	void ProcessPacket(ClientSession* session, SessionManager* sessionManager);
 
 private:
-	static void HandleLogin(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
-	static void HandleBroadcast(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
-	static void HandleWhisper(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
+	RedisManager* mRedis;
 
-	static bool CheckUserCredentials(const char* userId, const char* userPw);
+	void HandleLogin(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
+	void HandleBroadcast(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager); 
+	void HandleWhisper(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager); 
 
 	// static void SendLoginResponse(ClientSession* session, ErrorCode result);
 	// static void HandleRoomChat(ClientSession* session, RoomChatReqPacket* packet);

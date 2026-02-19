@@ -55,12 +55,16 @@ public:
 	SessionState GetState() const { return mState; }	
 	const string& GetUsername() const { return mUsername; }
 
+	string GetToken() const { return mToken; }
+
 	char* GetTempRecvBuf() { return mTempRecvBuf; }
 	RingBuffer& GetRecvBuffer() { return mRecvBuffer; }
 
 	// Setter
 	void SetState(SessionState state) { mState = state; }
 	void SetUsername(const string& username) { mUsername = username; }
+
+	void SetToken(const string& token) { mToken = token; }	
 
 	bool IsValid() const { return mSocket != INVALID_SOCKET; }
 	bool IsAuthenticated() const { return mState == SessionState::AUTHENTICATED; }
@@ -74,6 +78,7 @@ private:
 	UINT32 mSessionId;
 	SOCKET mSocket;
 	string mUsername;
+	string mToken;
 	SessionState mState;
 
 	// Recv
@@ -87,7 +92,5 @@ private:
 	queue<vector<char>> mSendQueue;
 	bool mIsSending;
 	SRWLOCK mSendLock;
-
-	DWORD mLastRecvTime;
 };
 
