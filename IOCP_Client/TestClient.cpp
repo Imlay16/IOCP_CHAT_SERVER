@@ -71,7 +71,7 @@ void TestClient::Disconnect()
 bool TestClient::Login()
 {
 	LoginReqPacket loginPacket;
-	loginPacket.SetLoginInfo(mName.c_str(), "testpw", mName.c_str());
+	loginPacket.SetLoginInfo("TestUser", "testpw", mName.c_str());
 
 	int sendBytes = send(mSocket, (char*)&loginPacket, loginPacket.size, 0);
 	if (sendBytes == SOCKET_ERROR)
@@ -128,6 +128,18 @@ bool TestClient::SendWhisper(const string& targetUser, const string& message)
 		return false;
 	}
 
+	return true;
+}
+
+bool TestClient::SendHeartbeat()
+{
+	HeartbeatPacket packet;
+	int sendBytes = send(mSocket, (char*)&packet, packet.size, 0);
+	if (sendBytes == SOCKET_ERROR)
+	{
+		cout << "[" << mName << "] Heartbeat send error: " << WSAGetLastError() << endl;
+		return false;
+	}
 	return true;
 }
 
@@ -195,6 +207,9 @@ void TestClient::ProcessPacket(PacketHeader* packet)
 	case PacketType::WHISPER_RESPONSE:
 		HandleWhisperResponse((WhisperChatResPacket*)packet);
 		break;
+	case PacketType::HEART_BEAT:
+		HandleHeartbeat();
+		break;
 
 	default:
 		cout << "[" << mName << "] Unknown packet type" << endl;
@@ -234,3 +249,9 @@ void TestClient::HandleWhisperResponse(WhisperChatResPacket* packet)
 	}
 }
 
+void TestClient::HandleHeartbeat()
+{
+	cout << "[HEARTBEAT] Receiving Heartbeat from Server... " << endl;
+
+	SendHeartbeat();
+}

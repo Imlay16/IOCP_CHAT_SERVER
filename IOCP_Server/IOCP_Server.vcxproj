@@ -138,7 +138,6 @@
     <ClInclude Include="ClientSession.h" />
     <ClInclude Include="IOCPServer.h" />
     <ClInclude Include="PacketHandler.h" />
-    <ClInclude Include="RedisManager.h" />
     <ClInclude Include="RingBuffer.h" />
     <ClInclude Include="SessionManager.h" />
     <ClInclude Include="SRWLockGuard.h" />

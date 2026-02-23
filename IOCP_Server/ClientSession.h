@@ -3,6 +3,7 @@
 #include <string>
 #include <queue>
 #include <vector>
+#include <chrono>
 #include "RingBuffer.h"
 
 #define MAX_SOCKBUF 4096
@@ -55,8 +56,6 @@ public:
 	SessionState GetState() const { return mState; }	
 	const string& GetUsername() const { return mUsername; }
 
-	string GetToken() const { return mToken; }
-
 	char* GetTempRecvBuf() { return mTempRecvBuf; }
 	RingBuffer& GetRecvBuffer() { return mRecvBuffer; }
 
@@ -64,10 +63,16 @@ public:
 	void SetState(SessionState state) { mState = state; }
 	void SetUsername(const string& username) { mUsername = username; }
 
-	void SetToken(const string& token) { mToken = token; }	
-
 	bool IsValid() const { return mSocket != INVALID_SOCKET; }
 	bool IsAuthenticated() const { return mState == SessionState::AUTHENTICATED; }
+
+	void UpdateActivity() { mLastActivityTime = chrono::steady_clock::now(); }
+	int GetInactiveSeconds() const
+	{
+		auto now = chrono::steady_clock::now();
+		auto elapsed = chrono::duration_cast<std::chrono::seconds>(now - mLastActivityTime);
+		return static_cast<int>(elapsed.count());
+	}
 
 private:
 	void ProcessSend();
@@ -78,7 +83,6 @@ private:
 	UINT32 mSessionId;
 	SOCKET mSocket;
 	string mUsername;
-	string mToken;
 	SessionState mState;
 
 	// Recv
@@ -92,5 +96,7 @@ private:
 	queue<vector<char>> mSendQueue;
 	bool mIsSending;
 	SRWLOCK mSendLock;
+
+	chrono::steady_clock::time_point mLastActivityTime;
 };
 

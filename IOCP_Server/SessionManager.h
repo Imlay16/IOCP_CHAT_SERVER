@@ -32,6 +32,8 @@ private:
 	unordered_map<string, UINT32> mSessionIdByName;
 	unordered_map<UINT32, ClientSession*> mSessionById;
 
+	HANDLE mTimerHandle;
+
 	int mActiveSessionCount;	
 	SRWLOCK mSrwLock;
 };

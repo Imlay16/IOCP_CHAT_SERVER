@@ -75,24 +75,6 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 	}
 }
 
-string GenerateToken()
-{
-	static const char charset[] = "0123456789abcdef";
-	string token;
-	token.reserve(32);
-
-	random_device rd;
-	mt19937 gen(rd());
-	uniform_int_distribution<> dis(0, 15);
-
-	for (int i = 0; i < 32; ++i)
-	{
-		token += charset[dis(gen)];
-	}
-
-	return token;
-}
-
 void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
 {
 	if (header->GetSize() != sizeof(LoginReqPacket))
@@ -102,12 +84,12 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 	}
 
 	LoginReqPacket* packet = (LoginReqPacket*)header;
-
-	std::string storedPassword = mRedis->GetUserPassword(packet->userId);
-
 	LoginResPacket resPacket;
 
-	if (storedPassword.empty())
+	const string validId = "TestUser";
+	const string validPw = "testpw";
+
+	if (string(packet->userId) != validId)
 	{
 		resPacket.result = ErrorCode::USER_NOT_FOUND;
 		cout << "[PacketHandler] Login failed - User not found: " << packet->userId << endl;
@@ -115,7 +97,7 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 		return;
 	}
 
-	if (storedPassword != packet->password)
+	if (string(packet->password) != validPw)
 	{
 		resPacket.result = ErrorCode::WRONG_PASSWORD;
 		cout << "[PacketHandler] Login failed - Wrong password: " << packet->userId << endl;
@@ -131,26 +113,12 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 		return;
 	}
 
-	string token = GenerateToken();
-
-	if (!mRedis->CreateSession(token, packet->userId, 1800))
-	{
-		resPacket.result = ErrorCode::SERVER_ERROR;
-		cout << "[PacketHandler] Login failed - Session creation error" << endl;
-		session->SendPacket((char*)&resPacket, sizeof(resPacket));
-		return;
-	}
-
-	mRedis->SetOnlineStatus(packet->username, session->GetSessionId());
-
 	session->SetState(SessionState::AUTHENTICATED);
 	session->SetUsername(packet->username);
-	session->SetToken(token);
-
 	sessionManager->RegisterSession(session);
 
 	resPacket.result = ErrorCode::SUCCESS;
-	cout << "[PacketHandler] Login success: " << packet->username << " (token: " << token.substr(0, 8) << "...)" << endl;
+	cout << "[PacketHandler] Login success: " << packet->username << endl;
 
 	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }

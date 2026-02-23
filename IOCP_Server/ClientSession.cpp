@@ -30,6 +30,8 @@ void ClientSession::Initialize(SOCKET socket, UINT32 sessionId)
 	mIsSending = false;
 	mUsername.clear();
 
+	mLastActivityTime = chrono::steady_clock::now();
+
 	while (!mSendQueue.empty())
 	{
 		mSendQueue.pop();
@@ -55,7 +57,6 @@ void ClientSession::Reset()
 	mSessionId = 0;
 	mState = SessionState::DISCONNECTING;
 	mUsername.clear();
-	mToken.clear();
 
 	while (!mSendQueue.empty())
 	{

@@ -1,15 +1,14 @@
 #include "IOCPServer.h"
 
-IOCPServer::IOCPServer(RedisManager* redis) 
+IOCPServer::IOCPServer() 
 	: mListenSocket(INVALID_SOCKET)
 	, mIOCPHandle(nullptr)
 	, mSessionManager(nullptr)
-	, mRedis(redis)
 	, mSessionIdCounter(1)
 	, mIsWorkerRun(true)
 	, mIsAcceptRun(true)
 {
-	mPacketHandler = new PacketHandler(redis);
+	mPacketHandler = new PacketHandler();
 }
 
 IOCPServer::~IOCPServer()
@@ -170,13 +169,6 @@ void IOCPServer::WorkerThread()
 
 			if (session->IsValid())
 			{
-				if (session->IsAuthenticated())
-				{
-					mRedis->DeleteSession(session->GetToken());
-					mRedis->RemoveOnlineStatus(session->GetUsername());
-					cout << "[Redis] Cleaned session: " << session->GetUsername() << endl;
-				}
-
 				cout << "[IOCPServer] Client disconnected. Session ID: " << session->GetSessionId() << endl;
 				mSessionManager->UnregisterSession(session);
 			}
@@ -189,18 +181,13 @@ void IOCPServer::WorkerThread()
 		if (overlappedEx->operation == IOOperation::RECV)
 		{
 			session->GetRecvBuffer().Write(session->GetTempRecvBuf(), transferred);
+			session->UpdateActivity();
 
 			mPacketHandler->ProcessPacket(session, mSessionManager); 
 			
 			if (!session->RegisterRecv())
 			{
 				cout << "[IOCP Server] RegisterRecv failed! Session: " << session->GetSessionId() << endl;
-
-				if (session->IsAuthenticated())
-				{
-					mRedis->DeleteSession(session->GetToken());
-					mRedis->RemoveOnlineStatus(session->GetUsername());
-				}
 
 				mSessionManager->UnregisterSession(session);
 			}			

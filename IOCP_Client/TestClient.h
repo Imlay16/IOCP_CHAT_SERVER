@@ -21,6 +21,7 @@ public:
 	bool Login();
 	bool SendBroadcast(const string& message);
 	bool SendWhisper(const string& targetUser, const string& message);
+	bool SendHeartbeat();
 
 	bool IsAuthenticated() const { return mIsAuthenticated; }
 	bool IsRunning() const { return mIsRunning; }
@@ -37,6 +38,7 @@ private:
 	void HandleLoginResponse(LoginResPacket* packet);
 	void HandleBroadcastResponse(BroadcastResPacket* packet);
 	void HandleWhisperResponse(WhisperChatResPacket* packet);
+	void HandleHeartbeat();
 
 private:
 	int mId;
