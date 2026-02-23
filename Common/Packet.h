@@ -5,13 +5,16 @@
 const UINT16 MAX_PACKET_SIZE = 2048;
 const UINT16 MAX_CHAT_SIZE = 1024;
 const UINT8 MAX_USER_ID = 32;
-const UINT8 MAX_USER_PW = 32;
+const UINT8 MAX_USER_PW = 64;
+const UINT8 MAX_USER_NAME = 32;
 const UINT8 MAX_ROOM_PW = 32;
 const UINT8 MAX_ROOM_NUM = 32;
-const UINT8 MAX_USER_NAME = 32;
 
 enum class PacketType : UINT16
 {
+	REGISTER_REQUEST = 1001,
+	REGISTER_RESPONSE = 1002,
+
 	LOGIN_REQUEST = 2001,
 	LOGIN_RESPONSE = 2002,
 
@@ -99,46 +102,57 @@ struct PacketBase : PacketHeader
 
 struct RegisterReqPacket : PacketBase<RegisterReqPacket>
 {
-	char userId[MAX_USER_ID + 1];
+	char loginId[MAX_USER_ID + 1];
 	char password[MAX_USER_PW + 1];
-	
-	
+	char nickname[MAX_USER_NAME + 1];
+
+	RegisterReqPacket() : PacketBase(PacketType::REGISTER_REQUEST)
+	{
+		memset(loginId, 0, sizeof(loginId));
+		memset(password, 0, sizeof(password));
+		memset(nickname, 0, sizeof(nickname));
+	}
+
+	void SetRegisterInfo(const char* id, const char* pw, const char* name)
+	{
+		strcpy_s(loginId, MAX_USER_ID + 1, id);
+		strcpy_s(password, MAX_USER_PW + 1, pw);
+		strcpy_s(nickname, MAX_USER_NAME + 1, name);
+	}
 };
 
 struct RegisterResPacket : PacketBase<RegisterResPacket>
 {
 	ErrorCode result;
+
+	RegisterResPacket() : PacketBase(PacketType::REGISTER_RESPONSE) { }
 };
 
 struct LoginReqPacket : PacketBase<LoginReqPacket>
 {
-	char userId[MAX_USER_ID + 1];
+	char loginId[MAX_USER_ID + 1];
 	char password[MAX_USER_PW + 1];
-	char username[MAX_USER_NAME + 1];
 
 	LoginReqPacket() : PacketBase(PacketType::LOGIN_REQUEST)
 	{
-		memset(userId, 0, sizeof(userId));
+		memset(loginId, 0, sizeof(loginId));
 		memset(password, 0, sizeof(password));
-		memset(username, 0, sizeof(username));
 	}
 
-	void SetLoginInfo(const char* user, const char* pw, const char* name)
+	void SetLoginInfo(const char* id, const char* pw)
 	{
-		// 로그인에 필요한 정보를 설정
-		strcpy_s(userId, MAX_USER_ID + 1, user);
+		strcpy_s(loginId, MAX_USER_ID + 1, id);
 		strcpy_s(password, MAX_USER_PW + 1, pw);
-		strcpy_s(username, MAX_USER_NAME + 1, name);
 	}
 };
 
 struct LoginResPacket : PacketBase<LoginResPacket>
 {
 	ErrorCode result;
-
+	char nickname[MAX_USER_NAME + 1];
 	LoginResPacket() : PacketBase(PacketType::LOGIN_RESPONSE)
 	{
-
+		memset(nickname, 0, sizeof(nickname));
 	}
 };
 

@@ -21,6 +21,8 @@ private:
 	void HandleBroadcast(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager); 
 	void HandleWhisper(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager); 
 
+	void HandleRegister(ClientSession* session, PacketHeader* packet, SessionManager* sessionManager);
+
 	// static void SendLoginResponse(ClientSession* session, ErrorCode result);
 	// static void HandleRoomChat(ClientSession* session, RoomChatReqPacket* packet);
 	// static void HandleRoomList(ClientSession* session, RoomListReqPacket* packet);

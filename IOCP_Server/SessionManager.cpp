@@ -34,12 +34,12 @@ ClientSession* SessionManager::GetEmptySession()
 	return client;
 }
 
-ClientSession* SessionManager::FindSessionByName(const string& name)
+ClientSession* SessionManager::FindSessionByLoginId(const string& loginId)
 {
 	SRWLockGuard lock(&mSrwLock, false);
 
-	auto nameIt = mSessionIdByName.find(name);
-	if (nameIt == mSessionIdByName.end())
+	auto nameIt = mSessionIdByLoginId.find(loginId);
+	if (nameIt == mSessionIdByLoginId.end())
 	{
 		return nullptr;
 	}
@@ -65,7 +65,7 @@ void SessionManager::RegisterSession(ClientSession* session)
 {
 	SRWLockGuard lock(&mSrwLock);
 
-	mSessionIdByName[session->GetUsername()] = session->GetSessionId();
+	mSessionIdByLoginId[session->GetLoginId()] = session->GetSessionId();
 	mSessionById[session->GetSessionId()] = session;
 	mActiveSessionCount++;
 }
@@ -78,7 +78,7 @@ void SessionManager::UnregisterSession(ClientSession* session)
 	session->Reset();
 	mSessionIndexes.push(session - &mSessionContainer[0]);
 
-	mSessionIdByName.erase(session->GetUsername());
+	mSessionIdByLoginId.erase(session->GetUsername());
 	mSessionById.erase(session->GetSessionId());
 	
 	mActiveSessionCount--;

@@ -41,6 +41,9 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 
 		switch (header.GetType())
 		{
+		case PacketType::REGISTER_REQUEST:
+
+			break;
 		case PacketType::LOGIN_REQUEST:
 			HandleLogin(session, fullHeader, sessionManager);
 			break;
@@ -75,6 +78,20 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 	}
 }
 
+void PacketHandler::HandleRegister(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
+{
+	if (header->GetSize() != sizeof(RegisterReqPacket))
+	{
+		cout << "[PacketHandler] Register packet size error" << endl;
+		return;
+	}
+
+	RegisterReqPacket* packet = (RegisterReqPacket*)header;
+	RegisterResPacket* resPacket;
+
+	// MySql Connector를 이용해서 회원 등록. 아이디 중복 가입 금지
+}
+
 void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
 {
 	if (header->GetSize() != sizeof(LoginReqPacket))
@@ -89,10 +106,10 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 	const string validId = "TestUser";
 	const string validPw = "testpw";
 
-	if (string(packet->userId) != validId)
+	if (string(packet->loginId) != validId)
 	{
 		resPacket.result = ErrorCode::USER_NOT_FOUND;
-		cout << "[PacketHandler] Login failed - User not found: " << packet->userId << endl;
+		cout << "[PacketHandler] Login failed - User not found: " << packet->loginId << endl;
 		session->SendPacket((char*)&resPacket, sizeof(resPacket));
 		return;
 	}
@@ -100,25 +117,26 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 	if (string(packet->password) != validPw)
 	{
 		resPacket.result = ErrorCode::WRONG_PASSWORD;
-		cout << "[PacketHandler] Login failed - Wrong password: " << packet->userId << endl;
+		cout << "[PacketHandler] Login failed - Wrong password: " << packet->loginId << endl;
 		session->SendPacket((char*)&resPacket, sizeof(resPacket));
 		return;
 	}
 
-	if (sessionManager->FindSessionByName(packet->username) != nullptr)
+	if (sessionManager->FindSessionByLoginId(packet->loginId) != nullptr)
 	{
 		resPacket.result = ErrorCode::ALREADY_LOGGED_IN;
-		cout << "[PacketHandler] Login failed - Already logged in: " << packet->username << endl;
+		cout << "[PacketHandler] Login failed - Already logged in: " << packet->loginId << endl;
 		session->SendPacket((char*)&resPacket, sizeof(resPacket));
 		return;
 	}
 
 	session->SetState(SessionState::AUTHENTICATED);
-	session->SetUsername(packet->username);
+	// session->SetUsername(db->username); 
+	// session->SetLoginId(db->loginId); 
 	sessionManager->RegisterSession(session);
 
 	resPacket.result = ErrorCode::SUCCESS;
-	cout << "[PacketHandler] Login success: " << packet->username << endl;
+	cout << "[PacketHandler] Login success: " << packet->loginId << endl;
 
 	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
@@ -151,7 +169,7 @@ void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header, 
 	WhisperChatReqPacket* packet = (WhisperChatReqPacket*)header;
 	string receiver = packet->GetReceiver();
 
-	ClientSession* targetSession = sessionManager->FindSessionByName(receiver);
+	ClientSession* targetSession = sessionManager->FindSessionByLoginId(receiver);
 
 	WhisperChatResPacket resPacket;
 
