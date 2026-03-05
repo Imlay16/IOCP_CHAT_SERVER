@@ -79,7 +79,7 @@ struct PacketHeader
 	{
 	}
 
-	PacketHeader(PacketType packetType) : type(packetType), size(sizeof(0))
+	PacketHeader(PacketType packetType) : type(packetType), size(0)
 	{
 	}
 
