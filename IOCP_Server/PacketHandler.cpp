@@ -1,10 +1,12 @@
+#pragma once
+
 #include "PacketHandler.h"
 #include <iostream>
 #include <random>
 
 using namespace std;
 
-void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessionManager)
+void PacketHandler::ProcessPacket(ClientSession* session)
 {
 	RingBuffer& recvBuffer = session->GetRecvBuffer();
 
@@ -30,7 +32,7 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 		if (packetSize > MAX_PACKET_SIZE)
 		{
 			// 세션 정리하고 반납하기
-			sessionManager->UnregisterSession(session);
+			mSessionManager->UnregisterSession(session);
 			break;
 		}
 
@@ -42,10 +44,10 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 		switch (header.GetType())
 		{
 		case PacketType::REGISTER_REQUEST:
-
+			HandleRegister(session, fullHeader);
 			break;
 		case PacketType::LOGIN_REQUEST:
-			HandleLogin(session, fullHeader, sessionManager);
+			HandleLogin(session, fullHeader);
 			break;
 
 		case PacketType::BROADCAST_REQUEST:
@@ -54,11 +56,11 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 			{
 				if (fullHeader->GetType() == PacketType::BROADCAST_REQUEST)
 				{
-					HandleBroadcast(session, fullHeader, sessionManager);
+					HandleBroadcast(session, fullHeader);
 				}
 				else
 				{
-					HandleWhisper(session, fullHeader, sessionManager);
+					HandleWhisper(session, fullHeader);
 				}
 			}
 			else
@@ -78,7 +80,29 @@ void PacketHandler::ProcessPacket(ClientSession* session, SessionManager* sessio
 	}
 }
 
-void PacketHandler::HandleRegister(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
+void PacketHandler::SetSessionManager(SessionManager* sessionManager)
+{
+	mSessionManager = sessionManager;
+}
+
+void PacketHandler::SetDbManager(DbManager* dbManager)
+{
+	mDbManager = dbManager;
+}
+
+ErrorCode PacketHandler::ConvertDbResultToErrorCode(DbResult result)
+{
+	switch (result)
+	{
+	case DbResult::OK: return ErrorCode::SUCCESS;
+	case DbResult::DUPLICATE_ID: return ErrorCode::ID_ALREADY_EXISTS;
+	case DbResult::USER_NOT_FOUND: return ErrorCode::USER_NOT_FOUND;
+	case DbResult::WRONG_PASSWORD: return ErrorCode::WRONG_PASSWORD;
+	default: return ErrorCode::SERVER_ERROR;
+	}
+}
+
+void PacketHandler::HandleRegister(ClientSession* session, PacketHeader* header)
 {
 	if (header->GetSize() != sizeof(RegisterReqPacket))
 	{
@@ -87,12 +111,31 @@ void PacketHandler::HandleRegister(ClientSession* session, PacketHeader* header,
 	}
 
 	RegisterReqPacket* packet = (RegisterReqPacket*)header;
-	RegisterResPacket* resPacket;
+	RegisterResPacket resPacket;	
 
 	// MySql Connector를 이용해서 회원 등록. 아이디 중복 가입 금지
+
+	//string loginId(packet->loginId);
+	//string password(packet->password);
+	//string nickname(packet->nickname);
+
+	string loginId(packet->loginId, strnlen_s(packet->loginId, sizeof(packet->loginId)));
+	string password(packet->password, strnlen_s(packet->password, sizeof(packet->password)));
+	string nickname(packet->nickname, strnlen_s(packet->nickname, sizeof(packet->nickname)));
+
+
+	// Hash 적용
+	// string passwordHash = Hash(password);
+	string passwordHash = password;
+
+	DbResult dbResult = mDbManager->RegisterUser(loginId, passwordHash, nickname);
+	
+	resPacket.result = ConvertDbResultToErrorCode(dbResult);
+
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
 
-void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
+void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header)
 {
 	if (header->GetSize() != sizeof(LoginReqPacket))
 	{
@@ -122,7 +165,7 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 		return;
 	}
 
-	if (sessionManager->FindSessionByLoginId(packet->loginId) != nullptr)
+	if (mSessionManager->FindSessionByLoginId(packet->loginId) != nullptr)
 	{
 		resPacket.result = ErrorCode::ALREADY_LOGGED_IN;
 		cout << "[PacketHandler] Login failed - Already logged in: " << packet->loginId << endl;
@@ -133,7 +176,7 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 	session->SetState(SessionState::AUTHENTICATED);
 	// session->SetUsername(db->username); 
 	// session->SetLoginId(db->loginId); 
-	sessionManager->RegisterSession(session);
+	mSessionManager->RegisterSession(session);
 
 	resPacket.result = ErrorCode::SUCCESS;
 	cout << "[PacketHandler] Login success: " << packet->loginId << endl;
@@ -141,7 +184,7 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header, Se
 	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
 
-void PacketHandler::HandleBroadcast(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
+void PacketHandler::HandleBroadcast(ClientSession* session, PacketHeader* header)
 {
 	if (header->GetSize() != sizeof(BroadcastReqPacket))
 	{
@@ -155,10 +198,10 @@ void PacketHandler::HandleBroadcast(ClientSession* session, PacketHeader* header
 	resPacket.SetUser(session->GetUsername().c_str());
 	resPacket.SetMessage(packet->message);
 
-	sessionManager->BroadcastPacket(session, (char*)&resPacket, sizeof(resPacket));
+	mSessionManager->BroadcastPacket(session, (char*)&resPacket, sizeof(resPacket));
 }
 
-void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header, SessionManager* sessionManager)
+void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header)
 {
 	if (header->GetSize() != sizeof(WhisperChatReqPacket))
 	{
@@ -169,7 +212,7 @@ void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header, 
 	WhisperChatReqPacket* packet = (WhisperChatReqPacket*)header;
 	string receiver = packet->GetReceiver();
 
-	ClientSession* targetSession = sessionManager->FindSessionByLoginId(receiver);
+	ClientSession* targetSession = mSessionManager->FindSessionByLoginId(receiver);
 
 	WhisperChatResPacket resPacket;
 

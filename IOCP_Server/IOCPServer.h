@@ -10,6 +10,7 @@
 #include "ClientSession.h"
 #include "SessionManager.h"
 #include "PacketHandler.h"
+#include "DbManager.h"
 
 #define MAX_WORKERTHREAD 4
 #define KEEP_ALIVE_TIMEOUT 60
@@ -35,6 +36,7 @@ private:
 
     SessionManager* mSessionManager;
     PacketHandler* mPacketHandler;
+    DbManager* mDbManager;
 
     UINT32 mSessionIdCounter;
     bool mIsWorkerRun;
