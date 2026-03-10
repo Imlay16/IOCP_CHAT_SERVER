@@ -16,7 +16,7 @@ public:
 private:
 	void CreateClients(int numClients);
 	void ConnectAllClients();
-	void LoginAllClients();
+	void RegisterAndLoginAllClients();
 	void DisconnectAllClients();
 	void WaitForSeconds(int seconds);
 

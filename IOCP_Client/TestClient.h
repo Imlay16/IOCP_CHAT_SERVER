@@ -18,7 +18,9 @@ public:
 	bool Connect();
 	void Disconnect();
 
-	bool Login();
+	bool SendAll(SOCKET sock, const char* data, int totalSize);
+	bool Register(int num);
+	bool Login(int num);
 	bool SendBroadcast(const string& message);
 	bool SendWhisper(const string& targetUser, const string& message);
 	bool SendHeartbeat();
@@ -35,6 +37,7 @@ private:
 	void RecvLoop();
 	void ProcessPacket(PacketHeader* packet);
 
+	void HandleRegisterResponse(RegisterResPacket* packet);
 	void HandleLoginResponse(LoginResPacket* packet);
 	void HandleBroadcastResponse(BroadcastResPacket* packet);
 	void HandleWhisperResponse(WhisperChatResPacket* packet);
@@ -50,6 +53,9 @@ private:
 	HANDLE mRecvThread;
 	atomic<bool> mIsRunning;
 	atomic<bool> mIsAuthenticated;
+
+	atomic<bool> mRegisterResponseArrived;
+	atomic<ErrorCode> mRegisterResult;
 
 	char mRecvBuffer[MAX_SOCKBUF];
 

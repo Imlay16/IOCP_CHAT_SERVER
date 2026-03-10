@@ -10,6 +10,8 @@ TestClient::TestClient(int id, const string& name, const char* serverIP, int ser
 	, mRecvThread(nullptr)
 	, mIsRunning(false)
 	, mIsAuthenticated(false)
+	, mRegisterResponseArrived(false)
+	, mRegisterResult(ErrorCode::SERVER_ERROR)
 {
 }
 
@@ -68,15 +70,69 @@ void TestClient::Disconnect()
 	}
 }
 
-bool TestClient::Login()
+bool TestClient::SendAll(SOCKET sock, const char* data, int totalSize)
 {
-	LoginReqPacket loginPacket;
-	loginPacket.SetLoginInfo("TestUser", "testpw", mName.c_str());
+	int sent = 0;
 
-	int sendBytes = send(mSocket, (char*)&loginPacket, loginPacket.size, 0);
-	if (sendBytes == SOCKET_ERROR)
+	while (sent < totalSize)
 	{
-		cout << "[" << mName << "] Login send error: " << WSAGetLastError() << endl;
+		int ret = send(sock, data + sent, totalSize - sent, 0);
+		if (ret == SOCKET_ERROR || ret == 0)
+		{
+			return false;
+		}			
+
+		sent += ret;
+	}
+
+	return true;
+}
+
+bool TestClient::Register(int num)
+{
+	mRegisterResponseArrived = false;
+	mRegisterResult = ErrorCode::SERVER_ERROR;
+
+	string id = "LoginId" + to_string(num);
+	string nickname = "bot_" + to_string(num);
+
+	RegisterReqPacket packet;
+	packet.SetRegisterInfo(id.c_str(), "testpw", nickname.c_str());
+
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
+	{
+		cout << "[Client " << num << "] Register send error :" << WSAGetLastError() << endl;
+		return false;
+	}
+
+	// 회원가입 응답 대기
+	for (int i = 0; i < 300 && !mRegisterResponseArrived && mIsRunning; i++)
+	{
+		Sleep(10);
+	}
+
+	if (!mRegisterResponseArrived)
+	{
+		cout << "[Client" << num << "] Register response timeout" << endl;
+		return false;
+	}
+
+	return (mRegisterResult == ErrorCode::SUCCESS ||
+			mRegisterResult == ErrorCode::ID_ALREADY_EXISTS);
+}
+
+bool TestClient::Login(int num)
+{
+	mIsAuthenticated = false;
+
+	string id = "LoginId" + to_string(num);
+
+	LoginReqPacket packet;
+	packet.SetLoginInfo(id.c_str(), "testpw");
+
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
+	{
+		cout << "[Client " << num << "] Login send error" << endl;
 		return false;
 	}
 
@@ -100,8 +156,7 @@ bool TestClient::SendBroadcast(const string& message)
 	BroadcastReqPacket packet;
 	packet.SetMessage(message.c_str());
 
-	int sendBytes = send(mSocket, (char*)&packet, packet.size, 0);
-	if (sendBytes == SOCKET_ERROR)
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
 	{
 		cout << "[" << mName << "] Broadcast send error: " << WSAGetLastError() << endl;
 		return false;
@@ -121,8 +176,7 @@ bool TestClient::SendWhisper(const string& targetUser, const string& message)
 	WhisperChatReqPacket packet;
 	packet.SetWhisper(targetUser.c_str(), message.c_str());
 
-	int sendBytes = send(mSocket, (char*)&packet, packet.size, 0);
-	if (sendBytes == SOCKET_ERROR)
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
 	{
 		cout << "[" << mName << "] Whisper send error: " << WSAGetLastError() << endl;
 		return false;
@@ -134,12 +188,13 @@ bool TestClient::SendWhisper(const string& targetUser, const string& message)
 bool TestClient::SendHeartbeat()
 {
 	HeartbeatPacket packet;
-	int sendBytes = send(mSocket, (char*)&packet, packet.size, 0);
-	if (sendBytes == SOCKET_ERROR)
+
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
 	{
 		cout << "[" << mName << "] Heartbeat send error: " << WSAGetLastError() << endl;
 		return false;
 	}
+
 	return true;
 }
 
@@ -198,6 +253,9 @@ void TestClient::ProcessPacket(PacketHeader* packet)
 {
 	switch (packet->GetType())
 	{
+	case PacketType::REGISTER_RESPONSE:
+		HandleRegisterResponse((RegisterResPacket*)packet);
+		break;
 	case PacketType::LOGIN_RESPONSE:
 		HandleLoginResponse((LoginResPacket*)packet);
 		break;
@@ -217,11 +275,28 @@ void TestClient::ProcessPacket(PacketHeader* packet)
 	}
 }
 
+void TestClient::HandleRegisterResponse(RegisterResPacket* packet)
+{
+	mRegisterResponseArrived = true;
+
+	if (packet->result == ErrorCode::SUCCESS)
+	{
+		mRegisterResult = ErrorCode::SUCCESS;
+		cout << "[" << mId << "] Register successful" << endl;
+	}
+	else
+	{
+		cout << "[" << mId << "] Register failed" << endl;
+		mIsRunning = false;
+	}
+}
+
 void TestClient::HandleLoginResponse(LoginResPacket* packet)
 {
 	if (packet->result == ErrorCode::SUCCESS)
 	{
 		mIsAuthenticated = true;
+		mName = packet->nickname;
 		cout << "[" << mName << "] Login successful" << endl;
 	}
 	else

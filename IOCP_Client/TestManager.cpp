@@ -35,28 +35,50 @@ void TestManager::ConnectAllClients()
 	{
 		if (!client->Connect())
 		{
-			cout << "Failed to connect: " << client->GetName() << endl;
+			cout << "Failed to connect: " << client->GetId() << endl;
 		}
-		Sleep(10);
 	}
 
 	cout << "All clients connected" << endl;
 }
 
-void TestManager::LoginAllClients()
+void TestManager::RegisterAndLoginAllClients()
 {
-	cout << "Logging in all clients..." << endl;
+	cout << "Registering all clients..." << endl;
 
-	for (auto& client : mClients)
+	int registerSuccessCount = 0;
+
+	for (int i = 0; i < mClients.size(); ++i)
 	{
-		if (!client->Login())
+		if (mClients[i]->Register(i))
 		{
-			cout << "Failed to login: " << client->GetName() << endl;
+			++registerSuccessCount;
 		}
-		Sleep(10);
+		else
+		{
+			cout << "[Client " << i << "] Failed to register" << endl;
+		}
 	}
 
-	cout << "All Clients logged in" << endl;
+	cout << "Register complete: " << registerSuccessCount << " / " << mClients.size() << endl;
+
+	cout << "Logging in all clients..." << endl;
+
+	int loginSuccessCount = 0;
+	
+	for (int i = 0; i < mClients.size(); ++i)
+	{
+		if (mClients[i]->Login(i))
+		{
+			++loginSuccessCount;
+		}
+		else
+		{
+			cout << "[Client " << i << "] Failed to login" << endl;
+		}
+	}
+
+	cout << "Login complete: " << loginSuccessCount << " / " << mClients.size() << endl;
 }
 
 void TestManager::DisconnectAllClients()
@@ -87,7 +109,7 @@ void TestManager::RunBroadcastTest(int numClients, int messagesPerClient)
 
 	CreateClients(numClients);
 	ConnectAllClients();
-	LoginAllClients();
+	RegisterAndLoginAllClients();
 
 	WaitForSeconds(1);
 
@@ -133,7 +155,7 @@ void TestManager::RunWhisperTest(int numClients)
 
 	CreateClients(numClients);
 	ConnectAllClients();
-	LoginAllClients();
+	RegisterAndLoginAllClients();
 
 	WaitForSeconds(1);
 
@@ -173,7 +195,7 @@ void TestManager::RunMixedTest(int numClients)
 
 	CreateClients(numClients);
 	ConnectAllClients();
-	LoginAllClients();
+	RegisterAndLoginAllClients();
 
 	WaitForSeconds(1);
 
