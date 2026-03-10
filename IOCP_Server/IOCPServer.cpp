@@ -83,6 +83,12 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 		return false;
 	}
 
+	if (!mDbManager->CreateTables())
+	{
+		cout << "[IOCPServer] DbManager CreateTables failed" << endl;
+		return false;
+	}
+
 	mPacketHandler->SetSessionManager(mSessionManager);
 	mPacketHandler->SetDbManager(mDbManager);
 

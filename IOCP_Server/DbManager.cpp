@@ -10,6 +10,27 @@ DbManager::~DbManager()
 	mSession = nullptr;
 }
 
+bool DbManager::CreateTables()
+{
+    try
+    {
+        mSession->sql(
+            "CREATE TABLE IF NOT EXISTS users ("
+            "user_id INT AUTO_INCREMENT PRIMARY KEY,"
+            "login_id VARCHAR(32) NOT NULL UNIQUE,"
+            "password VARCHAR(255) NOT NULL,"
+            "nickname VARCHAR(32) NOT NULL,"
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")"
+        ).execute();
+    }
+    catch (const mysqlx::Error& e)
+    {
+        cout << "[DB] CreateTables Error: " << e.what() << endl;
+        return false;
+    }
+}
+
 bool DbManager::Init(const string& host,
 					 int port,
 					 const string& user,
@@ -24,6 +45,9 @@ bool DbManager::Init(const string& host,
     try
     {
         mSession = new mysqlx::Session(host, port, user, password);
+
+        // 스키마 없으면 생성
+        mSession->sql("CREATE DATABASE IF NOT EXISTS " + mSchema).execute();
 
         // 스키마 선택
         mSession->sql("USE " + mSchema).execute();
@@ -76,7 +100,7 @@ DbResult DbManager::RegisterUser(const string& loginId,
         auto res = mSession->sql("SELECT 1 FROM users WHERE login_id=? LIMIT 1").bind(loginId).execute();
 
         auto row = res.fetchOne();
-        if (!row.isNull())
+        if (row)
             return DbResult::DUPLICATE_ID;
 
         mSession->sql(
@@ -97,7 +121,7 @@ DbResult DbManager::RegisterUser(const string& loginId,
     }
 }
 
-DbResult DbManager::Login(const string& loginId,
+DbResult DbManager::LoginUser(const string& loginId,
                           const string& inputPasswordHash,
                           UserRow& outUser)
 {
@@ -126,13 +150,13 @@ DbResult DbManager::GetUserByLoginId(const string& loginId,
     try
     {
         auto res = mSession->sql(
-            "SELECT id, login_id, password_hash, nickname"
+            "SELECT id, login_id, password_hash, nickname "
             "FROM users WHERE login_id=? LIMIT 1"
         ).bind(loginId).execute();
 
         auto row = res.fetchOne();
 
-        if (row.isNull())
+        if (!row)
             return DbResult::USER_NOT_FOUND;
 
         outUser.id = static_cast<long long>(row[0]);

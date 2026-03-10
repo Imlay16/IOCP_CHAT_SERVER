@@ -33,6 +33,8 @@ public:
 	DbManager(const DbManager&) = delete;
 	DbManager& operator=(const DbManager&) = delete;
 
+	bool CreateTables();
+
 	bool Init(const string& host,
 			  int port,
 			  const string& user,
@@ -45,7 +47,7 @@ public:
 						   const string& passwordHash,
 						   const string& nickname);
 
-	DbResult Login(const string& loginId,
+	DbResult LoginUser(const string& loginId,
 					const string& passwordHash,
 					UserRow& outUser);
 
