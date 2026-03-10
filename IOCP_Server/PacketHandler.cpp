@@ -146,40 +146,49 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header)
 	LoginReqPacket* packet = (LoginReqPacket*)header;
 	LoginResPacket resPacket;
 
-	const string validId = "TestUser";
-	const string validPw = "testpw";
-
-	if (string(packet->loginId) != validId)
-	{
-		resPacket.result = ErrorCode::USER_NOT_FOUND;
-		cout << "[PacketHandler] Login failed - User not found: " << packet->loginId << endl;
-		session->SendPacket((char*)&resPacket, sizeof(resPacket));
-		return;
-	}
-
-	if (string(packet->password) != validPw)
-	{
-		resPacket.result = ErrorCode::WRONG_PASSWORD;
-		cout << "[PacketHandler] Login failed - Wrong password: " << packet->loginId << endl;
-		session->SendPacket((char*)&resPacket, sizeof(resPacket));
-		return;
-	}
-
-	if (mSessionManager->FindSessionByLoginId(packet->loginId) != nullptr)
+	if (session->GetState() == SessionState::AUTHENTICATED)
 	{
 		resPacket.result = ErrorCode::ALREADY_LOGGED_IN;
-		cout << "[PacketHandler] Login failed - Already logged in: " << packet->loginId << endl;
+		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+		return;
+	}
+
+	string loginId(packet->loginId, strnlen_s(packet->loginId, sizeof(packet->loginId)));
+	string password(packet->password, strnlen_s(packet->password, sizeof(packet->password)));
+
+	if (mSessionManager->FindSessionByLoginId(loginId) != nullptr)
+	{
+		resPacket.result = ErrorCode::ALREADY_LOGGED_IN;
+		cout << "[PacketHandler] Login failed - Already logged in: " << loginId << endl;
+		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+		return;
+	}
+
+	string passwordHash = password;
+
+	UserRow user{};
+	DbResult dbResult = mDbManager->LoginUser(loginId, passwordHash, user);
+
+	if (dbResult != DbResult::OK)
+	{
+		resPacket.result = ConvertDbResultToErrorCode(dbResult);
+		cout << "[PacketHandler] Login failed: " << loginId
+			<< ", result = " << static_cast<UINT16>(resPacket.result) << endl;
 		session->SendPacket((char*)&resPacket, sizeof(resPacket));
 		return;
 	}
 
 	session->SetState(SessionState::AUTHENTICATED);
-	// session->SetUsername(db->username); 
-	// session->SetLoginId(db->loginId); 
+	session->SetLoginId(user.loginId);
+	session->SetUsername(user.nickname);
+
 	mSessionManager->RegisterSession(session);
 
 	resPacket.result = ErrorCode::SUCCESS;
-	cout << "[PacketHandler] Login success: " << packet->loginId << endl;
+	strcpy_s(resPacket.nickname, sizeof(resPacket.nickname), user.nickname.c_str());
+
+	cout << "[PacketHandler] Login success: " << loginId
+		<< ", nickname = " << user.nickname << endl;
 
 	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
