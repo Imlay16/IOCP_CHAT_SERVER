@@ -77,7 +77,7 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	mSessionManager = new SessionManager(maxClientCount);
 	mDbManager = new DbManager();
 
-	if (!mDbManager->Init("127.0.0.1", 3306, "root", "passwordroot", "chat"))
+	if (!mDbManager->Init("127.0.0.1", 33060, "root", "1234", "chat"))
 	{
 		cout << "[IOCPServer] DbManager Init failed" << endl;
 		return false;

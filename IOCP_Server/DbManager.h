@@ -1,6 +1,7 @@
 #pragma once
 #include <mysqlx/xdevapi.h>
 #include <string>
+#include <mutex>
 
 using namespace std;
 
@@ -28,7 +29,7 @@ class DbManager
 {
 public:
 	DbManager() = default;
-	~DbManager();
+	~DbManager() = default;
 
 	DbManager(const DbManager&) = delete;
 	DbManager& operator=(const DbManager&) = delete;
@@ -55,7 +56,8 @@ private:
 	DbResult GetUserByLoginId(const string& loginId, UserRow& outUser);
 	
 private:
-	mysqlx::Session* mSession = nullptr;
+	unique_ptr<mysqlx::Session> mSession;
 	string mSchema;
+	mutex mDbMutex;
 };
 

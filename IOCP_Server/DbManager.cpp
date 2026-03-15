@@ -4,31 +4,34 @@
 
 using namespace std;
 
-DbManager::~DbManager()
-{
-	delete mSession;
-	mSession = nullptr;
-}
-
 bool DbManager::CreateTables()
 {
     try
     {
-        mSession->sql(
-            "CREATE TABLE IF NOT EXISTS users ("
-            "user_id INT AUTO_INCREMENT PRIMARY KEY,"
-            "login_id VARCHAR(32) NOT NULL UNIQUE,"
-            "password VARCHAR(255) NOT NULL,"
-            "nickname VARCHAR(32) NOT NULL,"
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-            ")"
-        ).execute();
+        if (!mSession)
+        {
+            cout << "[DB] CreateTables Error: session is null" << endl;
+            return false;
+        }
+
+        mSession->sql(R"(
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INT AUTO_INCREMENT PRIMARY KEY,
+            login_id VARCHAR(32) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            nickname VARCHAR(32) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        )").execute();
+
+        return true;
     }
     catch (const mysqlx::Error& e)
     {
         cout << "[DB] CreateTables Error: " << e.what() << endl;
         return false;
     }
+    return true;
 }
 
 bool DbManager::Init(const string& host,
@@ -39,15 +42,9 @@ bool DbManager::Init(const string& host,
 {
 	mSchema = schema;
 
-    delete mSession;
-    mSession = nullptr;
-
     try
     {
-        mSession = new mysqlx::Session(host, port, user, password);
-
-        // 스키마 없으면 생성
-        mSession->sql("CREATE DATABASE IF NOT EXISTS " + mSchema).execute();
+        mSession = make_unique<mysqlx::Session>(host, port, user, password);
 
         // 스키마 선택
         mSession->sql("USE " + mSchema).execute();
@@ -66,9 +63,6 @@ bool DbManager::Init(const string& host,
         std::cout << "[DB] Init std::exception: " << e.what() << std::endl;
     }
 
-    // 실패 시 세션 정리
-    delete mSession;
-    mSession = nullptr;
     return false;
 }
 
@@ -147,11 +141,15 @@ DbResult DbManager::GetUserByLoginId(const string& loginId,
     if (!IsConnected())
         return DbResult::CONNECTION_ERROR;
 
+    lock_guard<mutex> lock(mDbMutex);
+
     try
     {
-        auto res = mSession->sql(
-            "SELECT id, login_id, password_hash, nickname "
-            "FROM users WHERE login_id=? LIMIT 1"
+        auto res = mSession->sql(R"(
+            SELECT user_id, login_id, password_hash, nickname
+            FROM users
+            WHERE login_id=? LIMIT 1
+        )"
         ).bind(loginId).execute();
 
         auto row = res.fetchOne();
