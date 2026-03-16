@@ -11,8 +11,7 @@ void PrintMenu() {
 	cout << "1. Broadcast Test (10 clients, 3 messages each)" << endl;
 	cout << "2. Whisper Test (5 clients)" << endl;
 	cout << "3. Mixed Test (5 clients)" << endl;
-	cout << "4. Custom Broadcast Test" << endl;
-	cout << "5. Exit" << endl;
+	cout << "4. Exit" << endl;
 	cout << "========================================" << endl;
 	cout << "Select: ";
 }
@@ -31,6 +30,9 @@ int main(int argc, char* argv[]) {
 
     TestManager testManager(argv[1], atoi(argv[2]));
 
+    testManager.Connect(10);
+
+
     while (true) {
         PrintMenu();
 
@@ -39,28 +41,17 @@ int main(int argc, char* argv[]) {
 
         switch (choice) {
         case 1:
-            testManager.RunBroadcastTest(10, 3);
+            testManager.RunBroadcastTest(3);
             break;
 
         case 2:
-            testManager.RunWhisperTest(5);
+            testManager.RunWhisperTest();
             break;
 
         case 3:
-            testManager.RunMixedTest(5);
+            testManager.RunMixedTest();
             break;
-
-        case 4: {
-            int numClients, numMessages;
-            cout << "Number of clients: ";
-            cin >> numClients;
-            cout << "Messages per client: ";
-            cin >> numMessages;
-            testManager.RunBroadcastTest(numClients, numMessages);
-            break;
-        }
-
-        case 5:
+        case 4:
             cout << "Exiting..." << endl;
             WSACleanup();
             return 0;

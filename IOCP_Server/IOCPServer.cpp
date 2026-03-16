@@ -4,6 +4,7 @@ IOCPServer::IOCPServer()
 	: mListenSocket(INVALID_SOCKET)
 	, mIOCPHandle(nullptr)
 	, mSessionManager(nullptr)
+	, mDbManager(nullptr)
 	, mSessionIdCounter(1)
 	, mIsWorkerRun(true)
 	, mIsAcceptRun(true)
@@ -21,6 +22,9 @@ IOCPServer::~IOCPServer()
 	delete mPacketHandler;
 	mPacketHandler = nullptr;
 
+	delete mDbManager;
+	mDbManager = nullptr;
+	
 	WSACleanup();
 }
 
@@ -52,13 +56,13 @@ bool IOCPServer::BindAndListen(int bindPort)
 	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serverAddr.sin_port = htons(bindPort);
 
-	if (bind(mListenSocket, (SOCKADDR*)&serverAddr, sizeof(serverAddr)) != 0)
+	if (::bind(mListenSocket, (SOCKADDR*)&serverAddr, sizeof(serverAddr)) != 0)
 	{
 		cout << "[IOCPServer] bind Error: " << GetLastError() << endl;
 		return false;
 	}
 
-	if (listen(mListenSocket, SOMAXCONN) != 0)
+	if (::listen(mListenSocket, SOMAXCONN) != 0)
 	{
 		cout << "[IOCPServer] listen Error: " << GetLastError() << endl;
 		return false;
@@ -71,6 +75,22 @@ bool IOCPServer::BindAndListen(int bindPort)
 bool IOCPServer::StartServer(UINT32 maxClientCount)
 {
 	mSessionManager = new SessionManager(maxClientCount);
+	mDbManager = new DbManager();
+
+	if (!mDbManager->Init("127.0.0.1", 33060, "root", "1234", "chat"))
+	{
+		cout << "[IOCPServer] DbManager Init failed" << endl;
+		return false;
+	}
+
+	if (!mDbManager->CreateTables())
+	{
+		cout << "[IOCPServer] DbManager CreateTables failed" << endl;
+		return false;
+	}
+
+	mPacketHandler->SetSessionManager(mSessionManager);
+	mPacketHandler->SetDbManager(mDbManager);
 
 	mIOCPHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, MAX_WORKERTHREAD);
 	if (mIOCPHandle == nullptr)
@@ -183,7 +203,7 @@ void IOCPServer::WorkerThread()
 			session->GetRecvBuffer().Write(session->GetTempRecvBuf(), transferred);
 			session->UpdateActivity();
 
-			mPacketHandler->ProcessPacket(session, mSessionManager); 
+			mPacketHandler->ProcessPacket(session); 
 			
 			if (!session->RegisterRecv())
 			{
@@ -213,7 +233,7 @@ void IOCPServer::AcceptThread()
 			continue;
 		}
 
-		SOCKET clientSocket = accept(mListenSocket, (SOCKADDR*)&clientAddr, &addrLen);
+		SOCKET clientSocket = ::accept(mListenSocket, (SOCKADDR*)&clientAddr, &addrLen);
 		if (clientSocket == INVALID_SOCKET)
 		{
 			continue;

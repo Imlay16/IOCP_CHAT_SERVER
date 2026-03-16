@@ -13,7 +13,7 @@ public:
 	~SessionManager();
 
 	ClientSession* GetEmptySession();
-	ClientSession* FindSessionByName(const string& name);
+	ClientSession* FindSessionByLoginId(const string& loginId);
 	ClientSession* FindSessionById(UINT32 sessionId);
 
 	void RegisterSession(ClientSession* session);
@@ -29,7 +29,7 @@ private:
 
 	// vector<ClientSession> mSessions;
 
-	unordered_map<string, UINT32> mSessionIdByName;
+	unordered_map<string, UINT32> mSessionIdByLoginId;
 	unordered_map<UINT32, ClientSession*> mSessionById;
 
 	HANDLE mTimerHandle;

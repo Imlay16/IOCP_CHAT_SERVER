@@ -54,14 +54,16 @@ public:
 	UINT32 GetSessionId() const { return mSessionId; }
 	SOCKET GetSocket() const { return mSocket; }
 	SessionState GetState() const { return mState; }	
-	const string& GetUsername() const { return mUsername; }
+	const string& GetUsername() const { return mNickname; }
+	const string& GetLoginId() const { return mLoginId; }
 
 	char* GetTempRecvBuf() { return mTempRecvBuf; }
 	RingBuffer& GetRecvBuffer() { return mRecvBuffer; }
 
 	// Setter
 	void SetState(SessionState state) { mState = state; }
-	void SetUsername(const string& username) { mUsername = username; }
+	void SetUsername(const string& name) { mNickname = name; }
+	void SetLoginId(const string& id) { mLoginId = id; }
 
 	bool IsValid() const { return mSocket != INVALID_SOCKET; }
 	bool IsAuthenticated() const { return mState == SessionState::AUTHENTICATED; }
@@ -81,8 +83,9 @@ private:
 
 	// Session 
 	UINT32 mSessionId;
+	string mLoginId;
 	SOCKET mSocket;
-	string mUsername;
+	string mNickname;
 	SessionState mState;
 
 	// Recv
