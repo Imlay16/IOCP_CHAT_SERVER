@@ -76,7 +76,7 @@ void PacketHandler::ProcessPacket(ClientSession* session)
 
 		recvBuffer.Consume(packetSize);
 
-		cout << "[PacketHandler] Packet processed. Remaining: " << recvBuffer.GetDataSize() << " bytes" << endl;
+		// cout << "[PacketHandler] Packet processed. Remaining: " << recvBuffer.GetDataSize() << " bytes" << endl;
 	}
 }
 

@@ -13,18 +13,28 @@ TestManager::~TestManager()
 	DisconnectAllClients();
 }
 
-void TestManager::CreateClients(int numClients)
+void TestManager::Connect(int numClients)
+{
+	mNumClients = numClients;
+
+	CreateClients();
+	ConnectAllClients();
+	LoginAllClients();
+	// RegisterAllClients();
+}
+
+void TestManager::CreateClients()
 {
 	mClients.clear();
 
-	for (int i = 0; i < numClients; i++)
+	for (int i = 0; i < mNumClients; i++)
 	{
 		string name = "TestUser" + to_string(i + 1);
 		auto client = make_unique<TestClient>(i, name, mServerIP, mServerPort);
 		mClients.push_back(move(client));
 	}
 
-	cout << "Created " << numClients << " test clients" << endl;
+	cout << "Created " << mNumClients << " test clients" << endl;
 }
 
 void TestManager::ConnectAllClients()
@@ -42,7 +52,28 @@ void TestManager::ConnectAllClients()
 	cout << "All clients connected" << endl;
 }
 
-void TestManager::RegisterAndLoginAllClients()
+void TestManager::LoginAllClients()
+{
+	cout << "Logging in all clients..." << endl;
+
+	int loginSuccessCount = 0;
+
+	for (int i = 0; i < mClients.size(); ++i)
+	{
+		if (mClients[i]->Login(i))
+		{
+			++loginSuccessCount;
+		}
+		else
+		{
+			cout << "[Client " << i << "] Failed to login" << endl;
+		}
+	}
+
+	cout << "Login complete: " << loginSuccessCount << " / " << mClients.size() << endl;
+}
+
+void TestManager::RegisterAllClients()
 {
 	cout << "Registering all clients..." << endl;
 
@@ -61,24 +92,6 @@ void TestManager::RegisterAndLoginAllClients()
 	}
 
 	cout << "Register complete: " << registerSuccessCount << " / " << mClients.size() << endl;
-
-	cout << "Logging in all clients..." << endl;
-
-	int loginSuccessCount = 0;
-	
-	for (int i = 0; i < mClients.size(); ++i)
-	{
-		if (mClients[i]->Login(i))
-		{
-			++loginSuccessCount;
-		}
-		else
-		{
-			cout << "[Client " << i << "] Failed to login" << endl;
-		}
-	}
-
-	cout << "Login complete: " << loginSuccessCount << " / " << mClients.size() << endl;
 }
 
 void TestManager::DisconnectAllClients()
@@ -100,16 +113,12 @@ void TestManager::WaitForSeconds(int seconds)
 	Sleep(seconds * 1000);
 }
 
-void TestManager::RunBroadcastTest(int numClients, int messagesPerClient)
+void TestManager::RunBroadcastTest(int messagesPerClient)
 {
 	cout << "\n========================================" << endl;
 	cout << "BROADCAST TEST" << endl;
-	cout << "Clients: " << numClients << ", Messages: " << messagesPerClient << endl;
+	cout << "Clients: " << mNumClients << ", Messages: " << messagesPerClient << endl;
 	cout << "========================================\n" << endl;
-
-	CreateClients(numClients);
-	ConnectAllClients();
-	RegisterAndLoginAllClients();
 
 	WaitForSeconds(1);
 
@@ -139,23 +148,17 @@ void TestManager::RunBroadcastTest(int numClients, int messagesPerClient)
 	cout << "Total messages received: " << totalReceived << endl;
 	cout << "Expected: " << (mClients.size() * messagesPerClient * (mClients.size() - 1)) << endl;
 
-	DisconnectAllClients();
-
 	cout << "\n========================================" << endl;
 	cout << "BROADCAST TEST FINISHED" << endl;
 	cout << "========================================\n" << endl;
 }
 
-void TestManager::RunWhisperTest(int numClients)
+void TestManager::RunWhisperTest()
 {
 	cout << "\n========================================" << endl;
 	cout << "WHISPER TEST" << endl;
-	cout << "Clients: " << numClients << endl;
+	cout << "Clients: " << mNumClients << endl;
 	cout << "========================================\n" << endl;
-
-	CreateClients(numClients);
-	ConnectAllClients();
-	RegisterAndLoginAllClients();
 
 	WaitForSeconds(1);
 
@@ -166,36 +169,27 @@ void TestManager::RunWhisperTest(int numClients)
 		size_t targetIdx = (i + 1) % mClients.size();
 
 		string message = "Whisper from " + mClients[i]->GetName();
-		mClients[i]->SendWhisper(mClients[targetIdx]->GetName(), message);
+		mClients[i]->SendWhisper(mClients[targetIdx]->GetId(), message);
 
 		cout << "[" << mClients[i]->GetName() << "] -> [" << mClients[targetIdx]->GetName() << "]" << endl;
 
 		Sleep(100);
 	}
 
-	cout << "\nTesting whisper to non-existent user..." << endl;
-	mClients[0]->SendWhisper("NonExistentUser", "NonExistent Message");
-
 	cout << "\nWhisper test completed. Waiting for responses..." << endl;
 	WaitForSeconds(3);
-
-	DisconnectAllClients();
 
 	cout << "\n========================================" << endl;
 	cout << "WHISPER TEST FINISHED" << endl;
 	cout << "========================================\n" << endl;	
 }
 
-void TestManager::RunMixedTest(int numClients)
+void TestManager::RunMixedTest()
 {
 	cout << "\n========================================" << endl;
 	cout << "MIXED TEST (Broadcast + Whisper)" << endl;
-	cout << "Clients: " << numClients << endl;
+	cout << "Clients: " << mNumClients << endl;
 	cout << "========================================\n" << endl;
-
-	CreateClients(numClients);
-	ConnectAllClients();
-	RegisterAndLoginAllClients();
 
 	WaitForSeconds(1);
 
@@ -208,15 +202,13 @@ void TestManager::RunMixedTest(int numClients)
 
 		if (mClients.size() >= 2)
 		{
-			mClients[1]->SendWhisper(mClients[0]->GetName(), "Whisper " + to_string(i));
+			mClients[1]->SendWhisper(mClients[0]->GetId(), "Whisper " + to_string(i));
 			Sleep(100);
 		}
 	}
 
 	cout << "\nMixed test completed. Waiting for responses..." << endl;
 	WaitForSeconds(3);
-
-	DisconnectAllClients();
 
 	cout << "\n========================================" << endl;
 	cout << "MIXED TEST FINISHED" << endl;

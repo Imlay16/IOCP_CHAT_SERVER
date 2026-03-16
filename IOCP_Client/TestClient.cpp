@@ -165,7 +165,7 @@ bool TestClient::SendBroadcast(const string& message)
 	return true;
 }
 
-bool TestClient::SendWhisper(const string& targetUser, const string& message)
+bool TestClient::SendWhisper(int targetId, const string& message)
 {
 	if (!mIsAuthenticated)
 	{
@@ -173,8 +173,10 @@ bool TestClient::SendWhisper(const string& targetUser, const string& message)
 		return false;
 	}
 
+	string id = "LoginId" + to_string(targetId);
+
 	WhisperChatReqPacket packet;
-	packet.SetWhisper(targetUser.c_str(), message.c_str());
+	packet.SetWhisper(id.c_str(), message.c_str());
 
 	if (!SendAll(mSocket, (const char*)&packet, packet.size))
 	{

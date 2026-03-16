@@ -22,7 +22,7 @@ public:
 	bool Register(int num);
 	bool Login(int num);
 	bool SendBroadcast(const string& message);
-	bool SendWhisper(const string& targetUser, const string& message);
+	bool SendWhisper(int targetId, const string& message);
 	bool SendHeartbeat();
 
 	bool IsAuthenticated() const { return mIsAuthenticated; }
