@@ -39,7 +39,6 @@ private:
     DbManager* mDbManager;
 
     UINT32 mSessionIdCounter;
-    bool mIsWorkerRun;
     bool mIsAcceptRun;
 
     void WorkerThread();

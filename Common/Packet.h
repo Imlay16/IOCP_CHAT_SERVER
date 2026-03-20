@@ -1,6 +1,6 @@
 #pragma once
-
 #include <Windows.h>
+#include <cstdint>
 
 const UINT16 MAX_PACKET_SIZE = 2048;
 const UINT16 MAX_CHAT_SIZE = 1024;
@@ -460,9 +460,9 @@ struct RoomChatResPacket : PacketBase<RoomChatResPacket>
 };
 
 
-//struct HeartbeatPacket : PacketBase<HeartbeatPacket>
-//{
-//	HeartbeatPacket() : PacketBase(PacketType::HEART_BEAT) { }	
-//};
+struct HeartbeatPacket : PacketBase<HeartbeatPacket>
+{
+	HeartbeatPacket() : PacketBase(PacketType::HEART_BEAT) { }	
+};
 
 #pragma pack(pop)

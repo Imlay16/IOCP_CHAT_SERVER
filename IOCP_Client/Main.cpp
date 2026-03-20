@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
 
     TestManager testManager(argv[1], atoi(argv[2]));
 
-    testManager.Connect(10);
+    testManager.Connect(100);
 
 
     while (true) {

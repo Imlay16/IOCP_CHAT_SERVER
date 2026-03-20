@@ -4,6 +4,7 @@
 #include <queue>
 #include <vector>
 #include <chrono>
+#include <atomic>
 #include "RingBuffer.h"
 
 #define MAX_SOCKBUF 4096
@@ -14,7 +15,8 @@ enum class SessionState
 {
 	CONNECTED,
 	AUTHENTICATED,
-	DISCONNECTING
+	DISCONNECTING,
+	IDLE
 };
 
 enum class IOOperation
@@ -49,6 +51,8 @@ public:
 	bool SendPacket(const char* data, int length);
 	bool RegisterRecv();
 	void OnSendCompleted();
+
+	bool TryDisconnect();
 
 	// Getter
 	UINT32 GetSessionId() const { return mSessionId; }
@@ -99,6 +103,7 @@ private:
 	queue<vector<char>> mSendQueue;
 	bool mIsSending;
 	SRWLOCK mSendLock;
+	SRWLOCK mStateLock;
 
 	chrono::steady_clock::time_point mLastActivityTime;
 };

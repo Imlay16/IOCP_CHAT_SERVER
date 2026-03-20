@@ -6,7 +6,6 @@ IOCPServer::IOCPServer()
 	, mSessionManager(nullptr)
 	, mDbManager(nullptr)
 	, mSessionIdCounter(1)
-	, mIsWorkerRun(true)
 	, mIsAcceptRun(true)
 {
 	mPacketHandler = new PacketHandler();
@@ -112,12 +111,9 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 
 void IOCPServer::DestroyThread()
 {
-	mIsWorkerRun = false;
-
-	if (mIOCPHandle != nullptr)
+	for (int i = 0; i < mIOWorkerThreads.size(); ++i)
 	{
-		CloseHandle(mIOCPHandle);
-		mIOCPHandle = nullptr;
+		PostQueuedCompletionStatus(mIOCPHandle, 0, 0, nullptr);
 	}
 
 	for (auto& thread : mIOWorkerThreads)
@@ -136,6 +132,12 @@ void IOCPServer::DestroyThread()
 
 	if (mAcceptThread.joinable()) {
 		mAcceptThread.join();
+	}
+
+	if (mIOCPHandle != nullptr)
+	{
+		CloseHandle(mIOCPHandle);
+		mIOCPHandle = nullptr;
 	}
 
 	cout << "[IOCPServer] All threads destroyed" << endl;
@@ -165,7 +167,7 @@ void IOCPServer::WorkerThread()
 	ClientSession* session = nullptr;
 	LPOVERLAPPED overlapped = nullptr;
 
-	while (mIsWorkerRun)
+	while (true)
 	{
 		BOOL success = GetQueuedCompletionStatus(
 			mIOCPHandle,
@@ -175,21 +177,27 @@ void IOCPServer::WorkerThread()
 			INFINITE
 		);
 
+		if (overlapped == nullptr)
+			break;
+
 		if (!success || transferred == 0)
 		{
+			if (session == nullptr)
+				continue;
+
 			if (!success)
 			{
 				DWORD err = GetLastError();
-				cout << "Abnormal Disconnect (Error: " << err << ")" << endl;
-			}
-			else
-			{
-				cout << "Normal Disconnect (FIN received)" << endl;
+				if (err != ERROR_OPERATION_ABORTED &&
+					err != ERROR_CONNECTION_ABORTED &&
+					err != ERROR_NETNAME_DELETED)
+				{
+					cout << "Abnormal Disconnect (Error: " << err << ")" << endl;
+				}
 			}
 
-			if (session->IsValid())
+			if (session->TryDisconnect())
 			{
-				cout << "[IOCPServer] Client disconnected. Session ID: " << session->GetSessionId() << endl;
 				mSessionManager->UnregisterSession(session);
 			}
 
@@ -209,7 +217,10 @@ void IOCPServer::WorkerThread()
 			{
 				cout << "[IOCP Server] RegisterRecv failed! Session: " << session->GetSessionId() << endl;
 
-				mSessionManager->UnregisterSession(session);
+				if (session->TryDisconnect())
+				{
+					mSessionManager->UnregisterSession(session);
+				}
 			}			
 		}
 		else if (overlappedEx->operation == IOOperation::SEND)
@@ -256,8 +267,5 @@ void IOCPServer::AcceptThread()
 
 		char clientIP[32] = { 0 };
 		inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, sizeof(clientIP) - 1);
-		cout << "[IOCPServer] Client connected - Session ID: " << sessionId
-			<< ", IP: " << clientIP
-			<< ", Socket: " << clientSocket << std::endl;
 	}
 }

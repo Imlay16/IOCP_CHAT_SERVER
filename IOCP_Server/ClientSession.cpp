@@ -5,7 +5,7 @@
 ClientSession::ClientSession()
 	: mSessionId(0)
 	, mSocket(INVALID_SOCKET)
-	, mState(SessionState::DISCONNECTING)
+	, mState(SessionState::IDLE)
 	, mRecvBuffer(MAX_SOCKBUF * 2)
 	, mIsSending(false)
 {
@@ -56,7 +56,6 @@ void ClientSession::Reset()
 	}		
 
 	mSessionId = 0;
-	mState = SessionState::DISCONNECTING;
 	mLoginId.clear();
 	mNickname.clear();
 
@@ -66,6 +65,18 @@ void ClientSession::Reset()
 	}
 
 	mIsSending = false;
+
+	mState = SessionState::IDLE;
+}
+
+bool ClientSession::TryDisconnect()
+{
+	SRWLockGuard lock(&mStateLock);
+	if (mState == SessionState::DISCONNECTING || mState == SessionState::IDLE)
+		return false;
+
+	mState = SessionState::DISCONNECTING;
+	return true;
 }
 
 bool ClientSession::SendPacket(const char* data, int length)

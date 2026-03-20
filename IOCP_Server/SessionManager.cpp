@@ -74,14 +74,12 @@ void SessionManager::UnregisterSession(ClientSession* session)
 {
 	SRWLockGuard lock(&mSrwLock);
 
-	// ClientSession ÃÊ±âÈ­
-	session->Reset();
-	mSessionIndexes.push(session - &mSessionContainer[0]);
-
 	mSessionIdByLoginId.erase(session->GetUsername());
 	mSessionById.erase(session->GetSessionId());
-	
+	mSessionIndexes.push(session - &mSessionContainer[0]);
 	mActiveSessionCount--;
+
+	session->Reset();
 }
 
 void SessionManager::BroadcastPacket(ClientSession* excludeSession, const char* data, int length)
