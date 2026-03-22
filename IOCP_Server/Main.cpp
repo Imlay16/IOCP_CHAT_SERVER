@@ -28,5 +28,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	server.StopServer();
+
 	return 0;
 }
