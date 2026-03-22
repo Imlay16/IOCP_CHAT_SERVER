@@ -19,8 +19,8 @@ void TestManager::Connect(int numClients)
 
 	CreateClients();
 	ConnectAllClients();
+	RegisterAllClients();
 	LoginAllClients();
-	// RegisterAllClients();
 }
 
 void TestManager::CreateClients()
