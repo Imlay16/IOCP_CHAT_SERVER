@@ -34,6 +34,26 @@ bool DbManager::CreateTables()
     return true;
 }
 
+bool DbManager::ClearTable()
+{
+    try
+    {
+        if (!mSession)
+        {
+            cout << "[DB] ClearTable Error: session is null" << endl;
+            return false;
+        }
+
+        mSession->sql("DELETE FROM users").execute();
+        return true;
+    }
+    catch (const mysqlx::Error& e)
+    {
+        cout << "[DB] ClearTable Error: " << e.what() << endl;
+        return false;
+    }
+}
+
 bool DbManager::Init(const string& host,
 					 int port,
 					 const string& user,

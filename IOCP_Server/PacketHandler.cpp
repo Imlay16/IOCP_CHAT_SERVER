@@ -187,9 +187,6 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header)
 	resPacket.result = ErrorCode::SUCCESS;
 	strcpy_s(resPacket.nickname, sizeof(resPacket.nickname), user.nickname.c_str());
 
-	cout << "[PacketHandler] Login success: " << loginId
-		<< ", nickname = " << user.nickname << endl;
-
 	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
 

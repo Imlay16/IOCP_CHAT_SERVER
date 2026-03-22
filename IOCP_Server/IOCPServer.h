@@ -26,6 +26,7 @@ public:
     bool InitSocket();
     bool BindAndListen(int bindPort);
     bool StartServer(UINT32 maxClientCount);
+    void StopServer();
     void DestroyThread();
 
 private:
@@ -39,7 +40,7 @@ private:
     DbManager* mDbManager;
 
     UINT32 mSessionIdCounter;
-    bool mIsAcceptRun;
+    atomic<bool> mIsAcceptRun;
 
     void WorkerThread();
     void AcceptThread();

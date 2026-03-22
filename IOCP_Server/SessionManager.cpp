@@ -1,5 +1,4 @@
 #include "SessionManager.h"
-#include "SRWLockGuard.h"
 #include <iostream>
 
 SessionManager::SessionManager(UINT32 maxSessionCount) : mActiveSessionCount(0)
@@ -91,6 +90,17 @@ void SessionManager::BroadcastPacket(ClientSession* excludeSession, const char* 
 		if (session.IsValid() && &session != excludeSession)
 		{
 			session.SendPacket(data, length);
+		}
+	}
+}
+
+void SessionManager::CloseAllSessions()
+{
+	for (auto& session : mSessionContainer)
+	{
+		if (session.GetState() != SessionState::IDLE)
+		{
+			closesocket(session.GetSocket());
 		}
 	}
 }

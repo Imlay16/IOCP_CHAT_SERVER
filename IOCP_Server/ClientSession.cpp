@@ -15,6 +15,7 @@ ClientSession::ClientSession()
 	ZeroMemory(mSendBuf, sizeof(mSendBuf));
 
 	InitializeSRWLock(&mSendLock);
+	InitializeSRWLock(&mStateLock);
 }
 
 ClientSession::~ClientSession()
@@ -46,11 +47,15 @@ void ClientSession::Initialize(SOCKET socket, UINT32 sessionId)
 
 void ClientSession::Reset()
 {
+	{
+		SRWLockGuard stateLock(&mStateLock); 
+		mState = SessionState::IDLE;
+	}
+
 	SRWLockGuard lock(&mSendLock);
 
 	if (mSocket != INVALID_SOCKET)
 	{
-		shutdown(mSocket, SD_BOTH);
 		closesocket(mSocket);
 		mSocket = INVALID_SOCKET;
 	}		
@@ -65,8 +70,6 @@ void ClientSession::Reset()
 	}
 
 	mIsSending = false;
-
-	mState = SessionState::IDLE;
 }
 
 bool ClientSession::TryDisconnect()
@@ -156,6 +159,10 @@ void ClientSession::OnSendCompleted()
 
 bool ClientSession::RegisterRecv()
 {
+	if (mState != SessionState::CONNECTED &&
+		mState != SessionState::AUTHENTICATED)
+		return false;
+
 	if (mSocket == INVALID_SOCKET)
 	{
 		return false;

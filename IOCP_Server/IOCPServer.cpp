@@ -13,8 +13,6 @@ IOCPServer::IOCPServer()
 
 IOCPServer::~IOCPServer()
 {
-	DestroyThread();
-
 	delete mSessionManager;
 	mSessionManager = nullptr;
 
@@ -76,7 +74,7 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	mSessionManager = new SessionManager(maxClientCount);
 	mDbManager = new DbManager();
 
-	if (!mDbManager->Init("127.0.0.1", 33060, "root", "1234", "chat"))
+	if (!mDbManager->Init("localhost", 33060, "root", "1234", "chat"))
 	{
 		cout << "[IOCPServer] DbManager Init failed" << endl;
 		return false;
@@ -85,6 +83,12 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	if (!mDbManager->CreateTables())
 	{
 		cout << "[IOCPServer] DbManager CreateTables failed" << endl;
+		return false;
+	}
+
+	if (!mDbManager->ClearTable())
+	{
+		cout << "[IOCPServer] DbManager ClearTable failed" << endl;
 		return false;
 	}
 
@@ -109,8 +113,13 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	return true;
 }
 
-void IOCPServer::DestroyThread()
+void IOCPServer::StopServer()
 {
+	mIsAcceptRun = false;
+	closesocket(mListenSocket);
+	if (mAcceptThread.joinable())
+		mAcceptThread.join();
+
 	for (int i = 0; i < mIOWorkerThreads.size(); ++i)
 	{
 		PostQueuedCompletionStatus(mIOCPHandle, 0, 0, nullptr);
@@ -124,15 +133,7 @@ void IOCPServer::DestroyThread()
 		}
 	}
 
-	mIsAcceptRun = false;
-	if (mListenSocket != INVALID_SOCKET)
-	{
-		closesocket(mListenSocket);
-	}
-
-	if (mAcceptThread.joinable()) {
-		mAcceptThread.join();
-	}
+	mSessionManager->CloseAllSessions();
 
 	if (mIOCPHandle != nullptr)
 	{
@@ -140,7 +141,7 @@ void IOCPServer::DestroyThread()
 		mIOCPHandle = nullptr;
 	}
 
-	cout << "[IOCPServer] All threads destroyed" << endl;
+	cout << "[IOCPServer] Stop Server..." << endl;
 }
 
 bool IOCPServer::BindIOCompletionPort(ClientSession* session)
@@ -182,24 +183,18 @@ void IOCPServer::WorkerThread()
 
 		if (!success || transferred == 0)
 		{
-			if (session == nullptr)
-				continue;
+			DWORD err = GetLastError();
 
-			if (!success)
+			if (!success &&
+				err != ERROR_OPERATION_ABORTED &&
+				err != ERROR_CONNECTION_ABORTED &&
+				err != ERROR_NETNAME_DELETED)
 			{
-				DWORD err = GetLastError();
-				if (err != ERROR_OPERATION_ABORTED &&
-					err != ERROR_CONNECTION_ABORTED &&
-					err != ERROR_NETNAME_DELETED)
-				{
-					cout << "Abnormal Disconnect (Error: " << err << ")" << endl;
-				}
+				cout << "[IOCP Server] Abnormal Disconnect (Error: " << err << ")\n";
 			}
 
 			if (session->TryDisconnect())
-			{
 				mSessionManager->UnregisterSession(session);
-			}
 
 			continue;
 		}
@@ -237,16 +232,15 @@ void IOCPServer::AcceptThread()
 
 	while (mIsAcceptRun)
 	{
+		SOCKET clientSocket = ::accept(mListenSocket, (SOCKADDR*)&clientAddr, &addrLen);
+		if (clientSocket == INVALID_SOCKET)
+			continue;
+
 		ClientSession* session = mSessionManager->GetEmptySession();
 		if (session == nullptr)
 		{
-			cout << "[IOCPServer] Client pool is full" << endl;			
-			continue;
-		}
-
-		SOCKET clientSocket = ::accept(mListenSocket, (SOCKADDR*)&clientAddr, &addrLen);
-		if (clientSocket == INVALID_SOCKET)
-		{
+			cout << "[IOCPServer] Client pool is full." << endl;
+			::closesocket(clientSocket);
 			continue;
 		}
 
