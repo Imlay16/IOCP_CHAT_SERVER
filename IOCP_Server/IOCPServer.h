@@ -36,6 +36,7 @@ private:
     thread mAcceptThread;
 
     SessionManager* mSessionManager;
+    RoomManager* mRoomManager;
     PacketHandler* mPacketHandler;
     DbManager* mDbManager;
 

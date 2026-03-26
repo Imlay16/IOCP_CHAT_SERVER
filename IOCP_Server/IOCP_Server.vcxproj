@@ -143,6 +143,7 @@
     <ClInclude Include="IOCPServer.h" />
     <ClInclude Include="PacketHandler.h" />
     <ClInclude Include="RingBuffer.h" />
+    <ClInclude Include="RoomManager.h" />
     <ClInclude Include="RoomSession.h" />
     <ClInclude Include="SessionManager.h" />
     <ClInclude Include="SRWLockGuard.h" />
@@ -153,6 +154,7 @@
     <ClCompile Include="IOCPServer.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="PacketHandler.cpp" />
+    <ClCompile Include="RoomManager.cpp" />
     <ClCompile Include="RoomSession.cpp" />
     <ClCompile Include="SessionManager.cpp" />
   </ItemGroup>
