@@ -1,16 +1,17 @@
 #pragma once
 #include <Windows.h>
 #include <cstdint>
+#include <string_view>
 
-const UINT16 MAX_PACKET_SIZE = 2048;
-const UINT16 MAX_CHAT_SIZE = 1024;
-const UINT8 MAX_USER_ID = 32;
-const UINT8 MAX_USER_PW = 64;
-const UINT8 MAX_USER_NAME = 32;
-const UINT8 MAX_ROOM_NAME = 32;
-const UINT8 MAX_ROOM_PAGE_COUNT = 10;
+constexpr uint16_t MAX_PACKET_SIZE = 2048;
+constexpr uint16_t MAX_CHAT_SIZE = 1024;
+constexpr uint8_t MAX_USER_ID = 32;
+constexpr uint8_t MAX_USER_PW = 64;
+constexpr uint8_t MAX_USER_NAME = 32;
+constexpr uint8_t MAX_ROOM_NAME = 32;
+constexpr uint8_t MAX_ROOM_PAGE_COUNT = 10;
 
-enum class PacketType : UINT16
+enum class PacketType : uint16_t
 {
 	REGISTER_REQUEST = 1001,
 	REGISTER_RESPONSE = 1002,
@@ -45,7 +46,7 @@ enum class PacketType : UINT16
 	NONE = 0,
 };
 
-enum class ErrorCode : UINT16
+enum class ErrorCode : uint16_t
 {
 	SUCCESS = 0,
 
@@ -73,6 +74,7 @@ enum class ErrorCode : UINT16
 	ALREADY_IN_ROOM = 2003,
 	PERMISSION_DENIED = 2004,
 	INVALID_ROOM_REQUEST = 2005,
+	ROOM_CREATION_FAIL = 2006,
 
 	// Server
 	SERVER_ERROR = 9999
@@ -83,7 +85,7 @@ enum class ErrorCode : UINT16
 struct PacketHeader
 {
 	PacketType type;
-	UINT16 size;
+	uint16_t size;
 
 	PacketHeader() : type(PacketType::NONE), size(0)
 	{
@@ -93,8 +95,8 @@ struct PacketHeader
 	{
 	}
 
-	void SetSize(UINT16 packetSize) { size = packetSize; }
-	UINT16 GetSize() const { return size; }
+	void SetSize(uint16_t packetSize) { size = packetSize; }
+	uint16_t GetSize() const { return size; }
 	PacketType GetType() const { return type; }
 };
 
@@ -103,7 +105,7 @@ struct PacketBase : PacketHeader
 {
 	PacketBase(PacketType type) : PacketHeader(type)
 	{
-		this->size = static_cast<UINT16>(sizeof(T));
+		this->size = static_cast<uint16_t>(sizeof(T));
 	}
 };
 
@@ -177,12 +179,12 @@ struct BroadcastReqPacket : PacketBase<BroadcastReqPacket>
 		memset(message, 0, sizeof(message));
 	}
 
-	void SetMessage(const char* msg)
+	void SetMessage(std::string_view msg)
 	{
-		if (!msg || msg[0] == '\0') 
+		if (msg.empty()) 
 			return;
 
-		strncpy_s(message, sizeof(message), msg, _TRUNCATE);
+		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
 	}
 };
 
@@ -197,20 +199,20 @@ struct BroadcastResPacket : PacketBase<BroadcastResPacket>
 		memset(message, 0, sizeof(message));
 	}
 
-	void SetUser(const char* name)
+	void SetUser(std::string_view name)
 	{
-		if (!name) 
+		if (name.empty()) 
 			return;
 
-		strncpy_s(user, sizeof(user), name, _TRUNCATE);
+		strncpy_s(user, sizeof(user), name.data(), _TRUNCATE);
 	}
 
-	void SetMessage(const char* msg)
+	void SetMessage(std::string_view msg)
 	{
-		if (!msg) 
+		if (msg.empty()) 
 			return;
 
-		strncpy_s(message, sizeof(message), msg, _TRUNCATE);
+		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
 	}
 };
 
@@ -225,13 +227,13 @@ struct WhisperChatReqPacket : PacketBase<WhisperChatReqPacket>
 		memset(message, 0, sizeof(message));
 	}
 
-	void SetWhisper(const char* receiverName, const char* msg)
+	void SetWhisper(std::string_view receiverName, std::string_view msg)
 	{
-		if (!receiverName|| !msg) 
+		if (receiverName.empty() || msg.empty()) 
 			return;
 
-		strncpy_s(receiver, sizeof(receiver), receiverName, _TRUNCATE);
-		strncpy_s(message, sizeof(message), msg, _TRUNCATE);
+		strncpy_s(receiver, sizeof(receiver), receiverName.data(), _TRUNCATE);
+		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
 	}
 
 	const char* GetReceiver() const { return receiver; }
@@ -250,13 +252,13 @@ struct WhisperChatResPacket : PacketBase<WhisperChatResPacket>
 		memset(message, 0, sizeof(message));
 	}
 
-	void SetMessage(const char* user, const char* msg)
+	void SetMessage(std::string_view user, std::string_view msg)
 	{
-		if (!user || !msg) 
+		if (user.empty() || msg.empty()) 
 			return;
 
-		strncpy_s(sender, sizeof(sender), user, _TRUNCATE);
-		strncpy_s(message, sizeof(message), msg, _TRUNCATE);
+		strncpy_s(sender, sizeof(sender), user.data(), _TRUNCATE);
+		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
 	}
 
 	void SetResult(ErrorCode error) { result = error; }
@@ -271,12 +273,12 @@ struct UserJoinNotifyPacket : PacketBase<UserJoinNotifyPacket>
 		memset(user, 0, sizeof(user));
 	}
 
-	void SetUser(const char* name)
+	void SetUser(std::string_view name)
 	{
-		if (!name)
+		if (name.empty())
 			return;
 
-		strncpy_s(user, MAX_USER_NAME + 1, name, _TRUNCATE);
+		strncpy_s(user, MAX_USER_NAME + 1, name.data(), _TRUNCATE);
 	}
 };
 
@@ -288,45 +290,52 @@ struct UserLeaveNotifyPacket : PacketBase<UserLeaveNotifyPacket>
 		memset(user, 0, sizeof(user));
 	}
 
-	void SetUser(const char* name)
+	void SetUser(std::string_view name)
 	{		
-		if (!name)
+		if (name.empty())
 			return;
 
-		strncpy_s(user, sizeof(user), name, _TRUNCATE);
+		strncpy_s(user, sizeof(user), name.data(), _TRUNCATE);
 	}
 };
 
 struct RoomInfo
 {
-	UINT16 roomId;
+	uint16_t roomId;
 	char roomName[MAX_ROOM_NAME + 1];
-	UINT8 maxUserCount;
-	UINT8 curUserCount;
+	uint16_t maxUserCount;
+	uint16_t curUserCount;
 
 	RoomInfo() : roomId(0), maxUserCount(0), curUserCount(0)
 	{
 		memset(roomName, 0, sizeof(roomName));
+	}
+
+	RoomInfo(uint16_t id, std::string_view name, uint16_t max, uint16_t cur)
+		: roomId(id), maxUserCount(max), curUserCount(cur)
+	{
+		memset(roomName, 0, sizeof(roomName)); 
+		strncpy_s(roomName, sizeof(roomName), name.data(), _TRUNCATE);
 	}
 };
 
 struct CreateRoomReqPacket : PacketBase<CreateRoomReqPacket>
 {
 	char roomName[MAX_ROOM_NAME + 1];
-	UINT8 maxUser;
+	uint16_t maxUser;
 
 	CreateRoomReqPacket() : PacketBase(PacketType::CREATE_ROOM_REQUEST), maxUser(0)
 	{
 		memset(this->roomName, 0, sizeof(this->roomName));
 	}
 
-	void SetRoomInfo(const char* roomName, UINT8 maxUser)
+	void SetRoomInfo(std::string_view roomName, uint16_t maxUser)
 	{
-		if (!roomName)
+		if (roomName.empty())
 			return;
 
 		this->maxUser = maxUser;
-		strncpy_s(this->roomName, sizeof(this->roomName), roomName, _TRUNCATE);
+		strncpy_s(this->roomName, sizeof(this->roomName), roomName.data(), _TRUNCATE);
 	}
 };
 
@@ -339,26 +348,26 @@ struct CreateRoomResPacket : PacketBase<CreateRoomResPacket>
 	{
 	}
 
-	void SetRoomInfo(UINT16 roomId, const char* roomName, UINT8 maxUserCount, UINT8 curUserCount)
+	void SetRoomInfo(uint16_t roomId, std::string_view roomName, uint16_t maxUserCount, uint16_t curUserCount)
 	{
-		if (!roomName) 
+		if (roomName.empty()) 
 			return;
 
 		room.roomId = roomId;
 		room.maxUserCount = maxUserCount;
 		room.curUserCount = curUserCount;
 
-		strncpy_s(room.roomName, sizeof(room.roomName), roomName, _TRUNCATE);
+		strncpy_s(room.roomName, sizeof(room.roomName), roomName.data(), _TRUNCATE);
 	}
 };
 
 struct JoinRoomReqPacket : PacketBase<JoinRoomReqPacket>
 {
-	UINT16 roomId;
+	uint16_t roomId;
 
 	JoinRoomReqPacket() : PacketBase(PacketType::JOIN_ROOM_REQUEST), roomId(0) {}
 
-	void JoinRoom(UINT16 id)
+	void JoinRoom(uint16_t id)
 	{
 		roomId = id;
 	}
@@ -386,13 +395,13 @@ struct LeaveRoomResPacket : PacketBase<LeaveRoomResPacket>
 
 struct RoomListReqPacket : PacketBase<RoomListReqPacket>
 {
-	UINT16 page;
+	uint16_t page;
 
 	RoomListReqPacket() : PacketBase(PacketType::ROOM_LIST_REQUEST), page(0)
 	{
 	}
 
-	void SetPage(UINT16 pageNumber)
+	void SetPage(uint16_t pageNumber)
 	{
 		page = pageNumber;
 	}
@@ -401,9 +410,9 @@ struct RoomListReqPacket : PacketBase<RoomListReqPacket>
 struct RoomListResPacket : PacketBase<RoomListResPacket>
 {
 	ErrorCode result;
-	UINT16 curPage;
-	UINT16 totalRoomCount;
-	UINT8 roomCount;
+	uint16_t curPage;
+	uint16_t totalRoomCount;
+	uint16_t roomCount;
 	RoomInfo rooms[MAX_ROOM_PAGE_COUNT];
 
 	RoomListResPacket() : PacketBase(PacketType::ROOM_LIST_RESPONSE),
@@ -414,7 +423,7 @@ struct RoomListResPacket : PacketBase<RoomListResPacket>
 	{
 	}
 
-	void SetPage(UINT16 pageNumber)
+	void SetPage(uint16_t pageNumber)
 	{
 		curPage = pageNumber;
 	}
@@ -429,12 +438,12 @@ struct RoomChatReqPacket : PacketBase<RoomChatReqPacket>
 		memset(message, 0, sizeof(message));
 	}
 
-	void SetMessage(const char* msg)
+	void SetMessage(std::string_view msg)
 	{
-		if (!msg) 
+		if (msg.empty()) 
 			return;
 
-		strncpy_s(message, sizeof(message), msg, _TRUNCATE);
+		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
 	}
 };
 
@@ -449,13 +458,13 @@ struct RoomChatResPacket : PacketBase<RoomChatResPacket>
 		memset(message, 0, sizeof(message));
 	}
 
-	void SetMessage(const char* name, const char* msg)
+	void SetMessage(std::string_view name, std::string_view msg)
 	{
-		if (!name || !msg) 
+		if (name.empty() || msg.empty()) 
 			return;
 
-		strncpy_s(user, sizeof(user), name, _TRUNCATE);
-		strncpy_s(message, sizeof(message), msg, _TRUNCATE);
+		strncpy_s(user, sizeof(user), name.data(), _TRUNCATE);
+		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
 	}
 };
 
