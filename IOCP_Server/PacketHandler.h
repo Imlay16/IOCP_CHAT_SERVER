@@ -2,6 +2,7 @@
 
 #include "ClientSession.h"
 #include "SessionManager.h"
+#include "RoomManager.h"
 #include "DbManager.h"
 #include "../Common/Packet.h"
 
@@ -18,24 +19,24 @@ public:
 	void ProcessPacket(ClientSession* session);
 	
 	void SetSessionManager(SessionManager* sessionManager);
+	void SetRoomManager(RoomManager* roomManager);
 	void SetDbManager(DbManager* dbManager);
 
 private:
-	void HandleLogin(ClientSession* session, PacketHeader* packet);
-	void HandleBroadcast(ClientSession* session, PacketHeader* packet); 
-	void HandleWhisper(ClientSession* session, PacketHeader* packet); 
-
-	void HandleRegister(ClientSession* session, PacketHeader* packet);
+	void HandleLogin(ClientSession* session, PacketHeader* header);
+	void HandleBroadcast(ClientSession* session, PacketHeader* header);
+	void HandleWhisper(ClientSession* session, PacketHeader* header);
+	void HandleRegister(ClientSession* session, PacketHeader* header);
+	void HandleCreateRoom(ClientSession* session, PacketHeader* header);
+	void HandleRoomList(ClientSession* session, PacketHeader* header);
+	void HandleJoinRoom(ClientSession* session, PacketHeader* header);
+	void HandleLeaveRoom(ClientSession* session, PacketHeader* header);
+	void HandleRoomChat(ClientSession* session, PacketHeader* header);
 
 	ErrorCode ConvertDbResultToErrorCode(DbResult result);
 private:
 	SessionManager* mSessionManager = nullptr;
+	RoomManager* mRoomManager = nullptr;
 	DbManager* mDbManager = nullptr;
-
-	// static void SendLoginResponse(ClientSession* session, ErrorCode result);
-	// static void HandleRoomChat(ClientSession* session, RoomChatReqPacket* packet);
-	// static void HandleRoomList(ClientSession* session, RoomListReqPacket* packet);
-	// static void HandleRoomCreate(ClientSession* session, CreateRoomReqPacket* packet);
-	// static void HandleRoomJoin(ClientSession* session, JoinRoomReqPacket* packet);
 };
 

@@ -85,6 +85,11 @@ void PacketHandler::SetSessionManager(SessionManager* sessionManager)
 	mSessionManager = sessionManager;
 }
 
+void PacketHandler::SetRoomManager(RoomManager* roomManager)
+{
+	mRoomManager = roomManager;
+}
+
 void PacketHandler::SetDbManager(DbManager* dbManager)
 {
 	mDbManager = dbManager;
@@ -201,7 +206,7 @@ void PacketHandler::HandleBroadcast(ClientSession* session, PacketHeader* header
 	BroadcastReqPacket* packet = (BroadcastReqPacket*)header;
 
 	BroadcastResPacket resPacket;
-	resPacket.SetUser(session->GetUsername().c_str());
+	resPacket.SetUser(session->GetUsername());
 	resPacket.SetMessage(packet->message);
 
 	mSessionManager->BroadcastPacket(session, (char*)&resPacket, sizeof(resPacket));
@@ -225,7 +230,7 @@ void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header)
 	if (targetSession != nullptr)
 	{
 		resPacket.result = ErrorCode::SUCCESS;
-		resPacket.SetMessage(session->GetUsername().c_str(), packet->GetMsg());
+		resPacket.SetMessage(session->GetUsername(), packet->GetMsg());
 		targetSession->SendPacket((char*)&resPacket, sizeof(resPacket));
 	}
 	else
@@ -234,5 +239,93 @@ void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header)
 		snprintf(resPacket.message, sizeof(resPacket.message),
 			"User '%s' not found", packet->receiver);
 		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+	}
+}
+
+void PacketHandler::HandleCreateRoom(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(CreateRoomReqPacket))
+	{
+		cout << "[PacketHandler] CreateRoom packet size error" << endl;
+		return;
+	}
+
+	CreateRoomReqPacket* packet = (CreateRoomReqPacket*)header;
+
+	CreateRoomResPacket resPacket;
+
+	auto result = mRoomManager->CreateRoomSession(session, packet->maxUser);
+	if (result.has_value())
+	{
+		resPacket.room = result.value();
+		resPacket.result = ErrorCode::SUCCESS;
+	}
+	else
+	{
+		resPacket.result = ErrorCode::ROOM_CREATION_FAIL;
+	}
+
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
+}
+
+void PacketHandler::HandleRoomList(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(RoomListReqPacket))
+	{
+		cout << "[PacketHandler] RoomList packet size error" << endl;
+		return;
+	}
+
+	RoomListReqPacket* packet = (RoomListReqPacket*)header;
+
+	RoomListResPacket resPacket;
+
+	auto result = mRoomManager->GetRoomListByPage(packet->page);
+
+	if (result.has_value())
+	{
+		resPacket.result = ErrorCode::SUCCESS;
+		resPacket.roomCount = static_cast<uint16_t>(result->size());
+		memcpy_s(resPacket.rooms, sizeof(resPacket.rooms), result->data(), result->size() * sizeof(RoomInfo));
+	}
+	else
+	{
+		resPacket.result = ErrorCode::INVALID_ROOM_REQUEST;
+	}
+
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
+}
+
+void PacketHandler::HandleJoinRoom(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(JoinRoomReqPacket))
+	{
+		cout << "[PacketHandler] JoinRoom packet size error" << endl;
+		return;
+	}
+
+
+	// 여기서 클라이언트가 보낸 ROOM ID를 확인.
+	// 실패: 방이 가득 참. 방이 존재하지 않음
+	
+
+	
+}
+
+void PacketHandler::HandleLeaveRoom(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(LeaveRoomReqPacket))
+	{
+		cout << "[PacketHandler] LeaveRoom packet size error" << endl;
+		return;
+	}
+}
+
+void PacketHandler::HandleRoomChat(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(RoomChatReqPacket))
+	{
+		cout << "[PacketHandler] RoomChat packet size error" << endl;
+		return;
 	}
 }

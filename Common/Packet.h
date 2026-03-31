@@ -410,22 +410,13 @@ struct RoomListReqPacket : PacketBase<RoomListReqPacket>
 struct RoomListResPacket : PacketBase<RoomListResPacket>
 {
 	ErrorCode result;
-	uint16_t curPage;
-	uint16_t totalRoomCount;
 	uint16_t roomCount;
 	RoomInfo rooms[MAX_ROOM_PAGE_COUNT];
 
 	RoomListResPacket() : PacketBase(PacketType::ROOM_LIST_RESPONSE),
 		result(ErrorCode::SUCCESS),
-		curPage(0),
-		totalRoomCount(0),
 		roomCount(0)
 	{
-	}
-
-	void SetPage(uint16_t pageNumber)
-	{
-		curPage = pageNumber;
 	}
 };
 
