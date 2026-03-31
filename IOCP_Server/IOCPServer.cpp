@@ -93,6 +93,7 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	}
 
 	mPacketHandler->SetSessionManager(mSessionManager);
+	mPacketHandler->SetRoomManager(mRoomManager);
 	mPacketHandler->SetDbManager(mDbManager);
 
 	mIOCPHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, MAX_WORKERTHREAD);

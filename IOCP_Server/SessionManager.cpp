@@ -14,11 +14,9 @@ SessionManager::SessionManager(UINT32 maxSessionCount) : mActiveSessionCount(0)
 	}	
 }
 
-SessionManager::~SessionManager() { }
-
 ClientSession* SessionManager::GetEmptySession()
 {
-	SRWLockGuard lock(&mSrwLock, true);
+	SRWLockGuard lock(&mSrwLock);
 
 	ClientSession* client = nullptr;
 
@@ -83,7 +81,7 @@ void SessionManager::UnregisterSession(ClientSession* session)
 
 void SessionManager::BroadcastPacket(ClientSession* excludeSession, const char* data, int length)
 {
-	SRWLockGuard lock(&mSrwLock);
+	SRWLockGuard lock(&mSrwLock, false);
 
 	for (auto& session : mSessionContainer)
 	{

@@ -11,7 +11,7 @@ class SessionManager
 {
 public:
 	SessionManager(UINT32 maxSessionCount);
-	~SessionManager();
+	~SessionManager() = default;
 
 	ClientSession* GetEmptySession();
 	ClientSession* FindSessionByLoginId(const string& loginId);
@@ -28,8 +28,6 @@ public:
 private:
 	vector<ClientSession> mSessionContainer;
 	stack<int> mSessionIndexes;
-
-	// vector<ClientSession> mSessions;
 
 	unordered_map<string, UINT32> mSessionIdByLoginId;
 	unordered_map<UINT32, ClientSession*> mSessionById;
