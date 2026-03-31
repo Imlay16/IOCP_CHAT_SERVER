@@ -15,8 +15,6 @@ RoomSession* RoomManager::GetEmptyRoom()
 {
 	RoomSession* room = nullptr;
 
-	SRWLockGuard lock(&mSrwLock);
-
 	if (!mRoomIndexes.empty())
 	{
 		int idx = mRoomIndexes.top();
@@ -31,40 +29,71 @@ RoomSession* RoomManager::GetEmptyRoom()
 
 RoomSession* RoomManager::FindRoomById(uint16_t roomId)
 {
-	SRWLockGuard lock(&mSrwLock, false);
-
 	auto it = mRoomById.find(roomId);
 	RoomSession* result = (it != mRoomById.end()) ? it->second : nullptr;
 
 	return result;
 }
 
-UINT16 RoomManager::CreateRoomSession(ClientSession* session, uint8_t maxUserCount)
+std::optional<RoomInfo> RoomManager::CreateRoomSession(ClientSession* session, uint16_t maxUserCount)
 {
+	SRWLockGuard lock(&mSrwLock);
+
 	RoomSession* room = GetEmptyRoom();
-	if (room == nullptr) return INVALID_ROOM_ID;
+	if (room == nullptr) return std::nullopt;
 
 	room->Init(maxUserCount);
 	room->AddUser(session);
 
-	{
-		SRWLockGuard lock(&mSrwLock, true);
-		mRoomById[room->GetRoomId()] = room;
-		mActiveRoomCount++;
-		mCurrentPage = (mActiveRoomCount - 1) / PAGECOUNT;
-	}
+	mRoomById[room->GetRoomId()] = room;
+	mActiveRoomCount++;
 
-	return room->GetRoomId();
+	return RoomInfo{ room->GetRoomId(), room->GetRoomName(), maxUserCount, 1 };
+}
+
+std::optional<vector<RoomInfo>> RoomManager::GetRoomListByPage(uint16_t page)
+{
+	SRWLockGuard lock(&mSrwLock, false); 
+
+	vector<RoomInfo> list;
+	list.reserve(MAX_ROOM_PAGE_COUNT);
+
+	// 페이지가 존재하는지 확인
+	uint16_t totalPage = mRoomById.size() / MAX_ROOM_PAGE_COUNT;
+	if (mRoomById.size() % MAX_ROOM_PAGE_COUNT != 0)
+		totalPage++;
+
+	// 페이지가 없는 경우 
+	if (page >= totalPage)
+		return std::nullopt;
+
+	uint16_t startIdx = page * MAX_ROOM_PAGE_COUNT;
+	uint16_t idx = 0;
+
+	for (auto& [_, room] : mRoomById)
+	{
+		if (idx < startIdx) { idx++; continue; }
+		if (idx >= startIdx + MAX_ROOM_PAGE_COUNT) break;
+
+		list.push_back(RoomInfo{ room->GetRoomId(),
+								 room->GetRoomName(),
+								 room->GetMaxUserCount(),
+								 room->GetCurrentUserCount() });
+		idx++;
+	}
+	return list;
 }
 
 bool RoomManager::JoinRoom(ClientSession* session, uint16_t roomId)
 {
+	SRWLockGuard lock(&mSrwLock);
+
 	auto room = FindRoomById(roomId);
 
 	if (room == nullptr) 
 		return false;
 
-	if (room->GetRemainUserCount() == 0) 
+	if (!room->IsEmpty())
 		return false;
 
 	room->AddUser(session);
@@ -73,6 +102,8 @@ bool RoomManager::JoinRoom(ClientSession* session, uint16_t roomId)
 
 void RoomManager::LeaveRoom(ClientSession* session, uint16_t roomId)
 {
+	SRWLockGuard lock(&mSrwLock);
+
 	auto room = FindRoomById(roomId);
 
 	if (room == nullptr)
@@ -81,15 +112,11 @@ void RoomManager::LeaveRoom(ClientSession* session, uint16_t roomId)
 	if (room->RemoveUser(session))
 	{
 		RemoveRoomSession(room);
-		mActiveRoomCount--;
-		mCurrentPage = (mActiveRoomCount + PAGECOUNT - 1) / PAGECOUNT;
 	}	
 }
 
 void RoomManager::RemoveRoomSession(RoomSession* room)
 {
-	SRWLockGuard lock(&mSrwLock);
-
 	mRoomById.erase(room->GetRoomId());
 	room->Clear();
 
