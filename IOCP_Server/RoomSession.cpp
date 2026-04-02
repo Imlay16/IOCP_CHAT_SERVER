@@ -24,56 +24,62 @@ void RoomSession::Clear()
 	mRoomState = RoomState::IDLE;
 }
 
-bool RoomSession::AddUser(ClientSession* session)
+ErrorCode RoomSession::JoinUser(ClientSession* session)
 {
 	if (mRoomState != RoomState::ACTIVE)
-		return false;
+		return ErrorCode::INVALID_ROOM_REQUEST;
 
-	if (mUsers.size() >= mMaxUserCount)
-		return false;
+	if (IsFull())
+		return ErrorCode::ROOM_FULL;
+
+	if (HasSession(session))
+		return ErrorCode::ALREADY_IN_ROOM;
 
 	mUsers.push_back(session);
-
 	JoinNotify(session);
 
-	return true;
+	return ErrorCode::SUCCESS;
 }
 
-bool RoomSession::RemoveUser(ClientSession* session)
+bool RoomSession::LeaveUser(ClientSession* session)
 {
 	auto it = std::find(mUsers.begin(), mUsers.end(), session);
-	if (it != mUsers.end()) {
-		std::iter_swap(it, mUsers.end() - 1);
-		mUsers.pop_back();
+	if (it == mUsers.end())
+		return false;
 
-		LeaveNotify(session);
-	}
+	std::iter_swap(it, mUsers.end() - 1);
+	mUsers.pop_back();
+	LeaveNotify(session);
 
 	if (mUsers.empty())
 		mRoomState = RoomState::CLOSING;
-
+	
 	return mUsers.empty();
 }
 
-void RoomSession::BroadCast(ClientSession* excludeSession, const char* data, int length)
+bool RoomSession::HasSession(ClientSession* session)
 {
-	SRWLockGuard lock(&mSrwLock);
-	BroadCastUnsafe(excludeSession, data, length);
+	for (auto* u : mUsers)
+	{
+		if (u == session)
+			return true;
+	}
+	return false;
 }
 
 void RoomSession::JoinNotify(ClientSession* joinSession)
 {
 	string joinMsg(joinSession->GetUsername() + " Joined the room.");
-	BroadCastUnsafe(joinSession, joinMsg.c_str(), joinMsg.size());
+	BroadCast(joinSession, joinMsg.c_str(), joinMsg.size());
 }
 
 void RoomSession::LeaveNotify(ClientSession* leaveSession)
 {
 	string leaveMsg(leaveSession->GetUsername() + " left the room.");
-	BroadCastUnsafe(leaveSession, leaveMsg.c_str(), leaveMsg.size());
+	BroadCast(leaveSession, leaveMsg.c_str(), leaveMsg.size());
 }
 
-void RoomSession::BroadCastUnsafe(ClientSession* excludeSession, const char* data, int length)
+void RoomSession::BroadCast(ClientSession* excludeSession, const char* data, int length)
 {
 	for (auto* session : mUsers)
 	{

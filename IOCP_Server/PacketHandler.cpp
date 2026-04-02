@@ -304,12 +304,15 @@ void PacketHandler::HandleJoinRoom(ClientSession* session, PacketHeader* header)
 		return;
 	}
 
+	auto* packet = reinterpret_cast<JoinRoomReqPacket*>(header);
 
+	if (mRoomManager->JoinRoom(session, packet->roomId))
+	{
+		
+	}
+	
 	// 여기서 클라이언트가 보낸 ROOM ID를 확인.
 	// 실패: 방이 가득 참. 방이 존재하지 않음
-	
-
-	
 }
 
 void PacketHandler::HandleLeaveRoom(ClientSession* session, PacketHeader* header)

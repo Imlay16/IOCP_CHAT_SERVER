@@ -14,7 +14,7 @@ public:
 
 	std::optional<vector<RoomInfo>> GetRoomListByPage(uint16_t page);
 	std::optional<RoomInfo> CreateRoomSession(ClientSession* session, uint16_t maxUserCount);
-	bool JoinRoom(ClientSession* session, uint16_t roomId);
+	ErrorCode JoinRoom(ClientSession* session, uint16_t roomId);
 	void LeaveRoom(ClientSession* session, uint16_t roomId);
 	
 private:

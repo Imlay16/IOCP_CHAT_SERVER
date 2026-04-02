@@ -15,7 +15,14 @@ enum class RoomState {
 class RoomSession
 {
 private:
-	void BroadCastUnsafe(ClientSession* excludeSession, const char* data, int length);
+	bool IsFull() const { return mUsers.size() == mMaxUserCount; }
+	bool IsEmpty() const { return mUsers.size() == 0; }
+	bool HasSession(ClientSession* session);
+
+	void JoinNotify(ClientSession* joinSession);
+	void LeaveNotify(ClientSession* leaveSession);
+
+	void Clear();
 
 public:
 	RoomSession();
@@ -33,15 +40,10 @@ public:
 	uint16_t GetMaxUserCount() const { return mMaxUserCount; }
 	uint16_t GetCurrentUserCount() const { return mUsers.size(); }
 
-	bool IsEmpty() const { return mUsers.size() < mMaxUserCount; }
-
-	bool AddUser(ClientSession* session);
-	bool RemoveUser(ClientSession* session);
-	void Clear();
+	ErrorCode JoinUser(ClientSession* session);
+	bool LeaveUser(ClientSession* session);
 
 	void BroadCast(ClientSession* excludeSession, const char* data, int length);
-	void JoinNotify(ClientSession* joinSession);
-	void LeaveNotify(ClientSession* leaveSession);
 
 private:
 	uint16_t mRoomId;

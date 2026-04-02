@@ -43,7 +43,7 @@ std::optional<RoomInfo> RoomManager::CreateRoomSession(ClientSession* session, u
 	if (room == nullptr) return std::nullopt;
 
 	room->Init(maxUserCount);
-	room->AddUser(session);
+	room->JoinUser(session);
 
 	mRoomById[room->GetRoomId()] = room;
 	mActiveRoomCount++;
@@ -84,35 +84,24 @@ std::optional<vector<RoomInfo>> RoomManager::GetRoomListByPage(uint16_t page)
 	return list;
 }
 
-bool RoomManager::JoinRoom(ClientSession* session, uint16_t roomId)
+ErrorCode RoomManager::JoinRoom(ClientSession* session, uint16_t roomId)
 {
 	SRWLockGuard lock(&mSrwLock);
-
 	auto room = FindRoomById(roomId);
-
-	if (room == nullptr) 
-		return false;
-
-	if (!room->IsEmpty())
-		return false;
-
-	room->AddUser(session);
-	return true;
+	if (room == nullptr)
+		return ErrorCode::ROOM_NOT_FOUND;
+	return room->JoinUser(session);
 }
 
 void RoomManager::LeaveRoom(ClientSession* session, uint16_t roomId)
 {
 	SRWLockGuard lock(&mSrwLock);
-
 	auto room = FindRoomById(roomId);
-
 	if (room == nullptr)
 		return;
 
-	if (room->RemoveUser(session))
-	{
+	if (room->LeaveUser(session))
 		RemoveRoomSession(room);
-	}	
 }
 
 void RoomManager::RemoveRoomSession(RoomSession* room)
