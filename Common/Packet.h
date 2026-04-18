@@ -2,84 +2,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <string_view>
-
-constexpr uint16_t MAX_PACKET_SIZE = 2048;
-constexpr uint16_t MAX_CHAT_SIZE = 1024;
-constexpr uint8_t MAX_USER_ID = 32;
-constexpr uint8_t MAX_USER_PW = 64;
-constexpr uint8_t MAX_USER_NAME = 32;
-constexpr uint8_t MAX_ROOM_NAME = 32;
-constexpr uint8_t MAX_ROOM_PAGE_COUNT = 10;
-
-enum class PacketType : uint16_t
-{
-	REGISTER_REQUEST = 1001,
-	REGISTER_RESPONSE = 1002,
-
-	LOGIN_REQUEST = 2001,
-	LOGIN_RESPONSE = 2002,
-
-	BROADCAST_REQUEST = 3001,
-	BROADCAST_RESPONSE = 3002,
-	ROOM_CHAT_REQUEST = 3003,
-	ROOM_CHAT_RESPONSE = 3004,
-	WHISPER_REQUEST = 3005,
-	WHISPER_RESPONSE = 3006,
-
-	ROOM_LIST_REQUEST = 4001,
-	ROOM_LIST_RESPONSE = 4002,
-
-	CREATE_ROOM_REQUEST = 4003,
-	CREATE_ROOM_RESPONSE = 4004,
-
-	JOIN_ROOM_REQUEST = 4005,
-	JOIN_ROOM_RESPONSE = 4006,
-
-	LEAVE_ROOM_REQUEST = 4007,
-	LEAVE_ROOM_RESPONSE = 4008,
-
-	USER_JOIN_NOTIFY = 5001,
-	USER_LEAVE_NOTIFY = 5002,
-
-	HEART_BEAT = 6000,
-
-	NONE = 0,
-};
-
-enum class ErrorCode : uint16_t
-{
-	SUCCESS = 0,
-
-	// Packet
-	INVALID_PACKET = 1001,
-
-	// Auth
-	AUTH_FAILED = 1101,
-	ALREADY_LOGGED_IN = 1102,
-
-	// Login
-	USER_NOT_FOUND = 1201,
-	WRONG_PASSWORD = 1202,
-	LOGIN_USER_ALREADY = 1203,
-	LOGIN_USER_FULL = 1204,
-
-	// Register
-	ID_ALREADY_EXISTS = 1301,
-	ID_INVALID = 1302,
-	PW_INVALID = 1303,
-
-	// Room
-	ROOM_NOT_FOUND = 2001,
-	ROOM_FULL = 2002,
-	ALREADY_IN_ROOM = 2003,
-	PERMISSION_DENIED = 2004,
-	INVALID_ROOM_REQUEST = 2005,
-	ROOM_CREATION_FAIL = 2006,
-
-	// Server
-	SERVER_ERROR = 9999
-};
-
+#include "..\Common\Common.h"
 
 #pragma pack(push, 1)
 struct PacketHeader
@@ -170,11 +93,11 @@ struct LoginResPacket : PacketBase<LoginResPacket>
 	}
 };
 
-struct BroadcastReqPacket : PacketBase<BroadcastReqPacket>
+struct LobbyChatReqPacket : PacketBase<LobbyChatReqPacket>
 {
 	char message[MAX_CHAT_SIZE + 1];
 
-	BroadcastReqPacket() : PacketBase(PacketType::BROADCAST_REQUEST)
+	LobbyChatReqPacket() : PacketBase(PacketType::LOBBY_CHAT_REQUEST)
 	{
 		memset(message, 0, sizeof(message));
 	}
@@ -188,12 +111,19 @@ struct BroadcastReqPacket : PacketBase<BroadcastReqPacket>
 	}
 };
 
-struct BroadcastResPacket : PacketBase<BroadcastResPacket>
+struct LobbyChatResPacket : PacketBase<LobbyChatResPacket>
+{
+	ErrorCode result;
+
+	LobbyChatResPacket() : PacketBase(PacketType::LOBBY_CHAT_RESPONSE) { }
+};
+
+struct LobbyChatNotiPacket : PacketBase<LobbyChatNotiPacket>
 {
 	char user[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	BroadcastResPacket() : PacketBase(PacketType::BROADCAST_RESPONSE)
+	LobbyChatNotiPacket() : PacketBase(PacketType::LOBBY_CHAT_NOTIFY)
 	{
 		memset(user, 0, sizeof(user));
 		memset(message, 0, sizeof(message));
@@ -201,7 +131,7 @@ struct BroadcastResPacket : PacketBase<BroadcastResPacket>
 
 	void SetUser(std::string_view name)
 	{
-		if (name.empty()) 
+		if (name.empty())
 			return;
 
 		strncpy_s(user, sizeof(user), name.data(), _TRUNCATE);
@@ -209,7 +139,7 @@ struct BroadcastResPacket : PacketBase<BroadcastResPacket>
 
 	void SetMessage(std::string_view msg)
 	{
-		if (msg.empty()) 
+		if (msg.empty())
 			return;
 
 		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
@@ -243,25 +173,30 @@ struct WhisperChatReqPacket : PacketBase<WhisperChatReqPacket>
 struct WhisperChatResPacket : PacketBase<WhisperChatResPacket>
 {
 	ErrorCode result;
+
+	WhisperChatResPacket() : PacketBase(PacketType::WHISPER_RESPONSE) { }
+};
+
+struct WhisperChatNotiPacket : PacketBase<WhisperChatNotiPacket>
+{
 	char sender[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	WhisperChatResPacket() : PacketBase(PacketType::WHISPER_RESPONSE)
-	{		
+	WhisperChatNotiPacket() : PacketBase(PacketType::WHISPER_NOTIFY)
+	{
 		memset(sender, 0, sizeof(sender));
 		memset(message, 0, sizeof(message));
 	}
 
 	void SetMessage(std::string_view user, std::string_view msg)
 	{
-		if (user.empty() || msg.empty()) 
+		if (user.empty() || msg.empty())
 			return;
 
 		strncpy_s(sender, sizeof(sender), user.data(), _TRUNCATE);
 		strncpy_s(message, sizeof(message), msg.data(), _TRUNCATE);
 	}
 
-	void SetResult(ErrorCode error) { result = error; }
 	const char* GetSender() { return sender; }
 };
 
@@ -296,26 +231,6 @@ struct UserLeaveNotifyPacket : PacketBase<UserLeaveNotifyPacket>
 			return;
 
 		strncpy_s(user, sizeof(user), name.data(), _TRUNCATE);
-	}
-};
-
-struct RoomInfo
-{
-	uint16_t roomId;
-	char roomName[MAX_ROOM_NAME + 1];
-	uint16_t maxUserCount;
-	uint16_t curUserCount;
-
-	RoomInfo() : roomId(0), maxUserCount(0), curUserCount(0)
-	{
-		memset(roomName, 0, sizeof(roomName));
-	}
-
-	RoomInfo(uint16_t id, std::string_view name, uint16_t max, uint16_t cur)
-		: roomId(id), maxUserCount(max), curUserCount(cur)
-	{
-		memset(roomName, 0, sizeof(roomName)); 
-		strncpy_s(roomName, sizeof(roomName), name.data(), _TRUNCATE);
 	}
 };
 
@@ -377,6 +292,7 @@ struct JoinRoomResPacket : PacketBase<JoinRoomResPacket>
 {
 	ErrorCode result;
 	RoomInfo room;
+	UserInfo users[MAX_ROOM_USER];
 
 	JoinRoomResPacket() : PacketBase(PacketType::JOIN_ROOM_RESPONSE) {}
 };
@@ -440,10 +356,17 @@ struct RoomChatReqPacket : PacketBase<RoomChatReqPacket>
 
 struct RoomChatResPacket : PacketBase<RoomChatResPacket>
 {
+	ErrorCode result;
+
+	RoomChatResPacket() : PacketBase(PacketType::ROOM_CHAT_RESPONSE) { }
+};
+
+struct RoomChatNotiPacket : PacketBase<RoomChatNotiPacket>
+{
 	char user[MAX_USER_NAME + 1];
 	char message[MAX_CHAT_SIZE + 1];
 
-	RoomChatResPacket() : PacketBase(PacketType::ROOM_CHAT_RESPONSE)
+	RoomChatNotiPacket() : PacketBase(PacketType::ROOM_CHAT_NOTIFY)
 	{
 		memset(user, 0, sizeof(user));
 		memset(message, 0, sizeof(message));
@@ -451,7 +374,7 @@ struct RoomChatResPacket : PacketBase<RoomChatResPacket>
 
 	void SetMessage(std::string_view name, std::string_view msg)
 	{
-		if (name.empty() || msg.empty()) 
+		if (name.empty() || msg.empty())
 			return;
 
 		strncpy_s(user, sizeof(user), name.data(), _TRUNCATE);
@@ -459,10 +382,13 @@ struct RoomChatResPacket : PacketBase<RoomChatResPacket>
 	}
 };
 
-
-struct HeartbeatPacket : PacketBase<HeartbeatPacket>
+struct SystemNotiPacket : PacketBase<SystemNotiPacket>
 {
-	HeartbeatPacket() : PacketBase(PacketType::HEART_BEAT) { }	
+	char message[MAX_CHAT_SIZE + 1];
+	SystemNotiPacket() : PacketBase(PacketType::SYSTEM_NOTIFY)
+	{
+		memset(message, 0, sizeof(message));
+	}
 };
 
 #pragma pack(pop)

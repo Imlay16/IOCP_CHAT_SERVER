@@ -14,9 +14,10 @@ class IOCPServer;
 class PacketHandler
 {
 public:
-	PacketHandler() { }
+	PacketHandler() = default;
+	~PacketHandler() = default;
 
-	void ProcessPacket(ClientSession* session);
+	bool ProcessPacket(ClientSession* session);
 	
 	void SetSessionManager(SessionManager* sessionManager);
 	void SetRoomManager(RoomManager* roomManager);
@@ -24,7 +25,7 @@ public:
 
 private:
 	void HandleLogin(ClientSession* session, PacketHeader* header);
-	void HandleBroadcast(ClientSession* session, PacketHeader* header);
+	void HandleLobbyChat(ClientSession* session, PacketHeader* header);
 	void HandleWhisper(ClientSession* session, PacketHeader* header);
 	void HandleRegister(ClientSession* session, PacketHeader* header);
 	void HandleCreateRoom(ClientSession* session, PacketHeader* header);

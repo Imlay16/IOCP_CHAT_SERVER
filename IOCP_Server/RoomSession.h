@@ -15,24 +15,23 @@ enum class RoomState {
 class RoomSession
 {
 private:
-	bool IsFull() const { return mUsers.size() == mMaxUserCount; }
-	bool IsEmpty() const { return mUsers.size() == 0; }
 	bool HasSession(ClientSession* session);
 
 	void JoinNotify(ClientSession* joinSession);
 	void LeaveNotify(ClientSession* leaveSession);
 
-	void Clear();
-
 public:
-	RoomSession();
+	explicit RoomSession(uint16_t roomId);
 	~RoomSession() = default;
+
+	RoomSession(const RoomSession&) = delete;
+	RoomSession& operator=(const RoomSession&) = delete;
+	RoomSession(RoomSession&&) = delete;
+	RoomSession& operator=(RoomSession&&) = delete;
 
 	void Init(uint16_t maxUserCount);
 
-	void SetRoomId(uint16_t id) { mRoomId = id; }
 	void SetRoomName(const string& name) { mName = name; }
-
 	void SetMaxUserCount(uint16_t maxUserCount) { mMaxUserCount = maxUserCount; }
 
 	uint16_t GetRoomId() const { return mRoomId; }
@@ -43,8 +42,15 @@ public:
 	ErrorCode JoinUser(ClientSession* session);
 	bool LeaveUser(ClientSession* session);
 
-	void BroadCast(ClientSession* excludeSession, const char* data, int length);
+	bool IsFull() const { return mUsers.size() == mMaxUserCount; }
+	bool IsEmpty() const { return mUsers.size() == 0; }
 
+	RoomInfo ToRoomInfo() const;
+	int FillUserList(UserInfo* outList, int maxCount) const;
+
+	void BroadCast(const char* data, int length);
+
+	void Clear();
 private:
 	uint16_t mRoomId;
 	string mName;

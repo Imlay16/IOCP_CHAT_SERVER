@@ -4,9 +4,10 @@ RoomManager::RoomManager(uint32_t maxRoomCount) : mActiveRoomCount(0)
 {
 	InitializeSRWLock(&mSrwLock);
 
-	mRoomContainer.resize(maxRoomCount);  
+	mRoomContainer.reserve(maxRoomCount);
 	for (uint32_t i = 0; i < maxRoomCount; ++i)
 	{
+		mRoomContainer.emplace_back(std::make_unique<RoomSession>(i));
 		mRoomIndexes.push(i);
 	}
 }
@@ -20,8 +21,7 @@ RoomSession* RoomManager::GetEmptyRoom()
 		int idx = mRoomIndexes.top();
 		mRoomIndexes.pop();
 
-		room = &mRoomContainer[idx];
-		room->SetRoomId(idx);
+		room = mRoomContainer[idx].get();
 	}
 
 	return room;
@@ -35,7 +35,7 @@ RoomSession* RoomManager::FindRoomById(uint16_t roomId)
 	return result;
 }
 
-std::optional<RoomInfo> RoomManager::CreateRoomSession(ClientSession* session, uint16_t maxUserCount)
+std::optional<RoomInfo> RoomManager::CreateRoomSession(ClientSession* session, std::string_view roomName, uint16_t maxUserCount)
 {
 	SRWLockGuard lock(&mSrwLock);
 
@@ -43,6 +43,7 @@ std::optional<RoomInfo> RoomManager::CreateRoomSession(ClientSession* session, u
 	if (room == nullptr) return std::nullopt;
 
 	room->Init(maxUserCount);
+	room->SetRoomName(string(roomName));
 	room->JoinUser(session);
 
 	mRoomById[room->GetRoomId()] = room;
@@ -53,17 +54,18 @@ std::optional<RoomInfo> RoomManager::CreateRoomSession(ClientSession* session, u
 
 std::optional<vector<RoomInfo>> RoomManager::GetRoomListByPage(uint16_t page)
 {
-	SRWLockGuard lock(&mSrwLock, false); 
+	SRWLockGuard lock(&mSrwLock, false);
 
 	vector<RoomInfo> list;
 	list.reserve(MAX_ROOM_PAGE_COUNT);
 
-	// 페이지가 존재하는지 확인
-	uint16_t totalPage = mRoomById.size() / MAX_ROOM_PAGE_COUNT;
+	if (mRoomById.empty())
+		return list;
+
+	uint16_t totalPage = static_cast<uint16_t>(mRoomById.size() / MAX_ROOM_PAGE_COUNT);
 	if (mRoomById.size() % MAX_ROOM_PAGE_COUNT != 0)
 		totalPage++;
 
-	// 페이지가 없는 경우 
 	if (page >= totalPage)
 		return std::nullopt;
 
@@ -84,24 +86,35 @@ std::optional<vector<RoomInfo>> RoomManager::GetRoomListByPage(uint16_t page)
 	return list;
 }
 
-ErrorCode RoomManager::JoinRoom(ClientSession* session, uint16_t roomId)
+std::pair<ErrorCode, RoomSession*> RoomManager::JoinRoom(ClientSession* session, uint16_t roomId)
 {
 	SRWLockGuard lock(&mSrwLock);
 	auto room = FindRoomById(roomId);
 	if (room == nullptr)
-		return ErrorCode::ROOM_NOT_FOUND;
-	return room->JoinUser(session);
+		return { ErrorCode::ROOM_NOT_FOUND, nullptr };
+
+	ErrorCode result = room->JoinUser(session);
+
+	return { result, result == ErrorCode::SUCCESS ? room : nullptr };
 }
 
-void RoomManager::LeaveRoom(ClientSession* session, uint16_t roomId)
+ErrorCode RoomManager::LeaveRoom(ClientSession* session)
 {
-	SRWLockGuard lock(&mSrwLock);
-	auto room = FindRoomById(roomId);
-	if (room == nullptr)
-		return;
+	if (session->GetUserState() != UserState::IN_ROOM)
+		return ErrorCode::INVALID_STATE;
 
-	if (room->LeaveUser(session))
+	SRWLockGuard lock(&mSrwLock);
+
+	auto room = FindRoomById(session->GetRoomId());
+	if (room == nullptr)
+		return ErrorCode::ROOM_NOT_FOUND;
+
+	room->LeaveUser(session);
+
+	if (room->IsEmpty())
 		RemoveRoomSession(room);
+
+	return ErrorCode::SUCCESS;
 }
 
 void RoomManager::RemoveRoomSession(RoomSession* room)
@@ -109,8 +122,26 @@ void RoomManager::RemoveRoomSession(RoomSession* room)
 	mRoomById.erase(room->GetRoomId());
 	room->Clear();
 
-	int index = room - &mRoomContainer[0];
-	mRoomIndexes.push(index);
+	mRoomIndexes.push(room->GetRoomId());
 
 	mActiveRoomCount--;
+}
+
+ErrorCode RoomManager::RoomChat(ClientSession* session, const char* message)
+{
+	if (session->GetUserState() != UserState::IN_ROOM)
+		return ErrorCode::INVALID_STATE;
+
+	SRWLockGuard lock(&mSrwLock);
+
+	auto room = FindRoomById(session->GetRoomId());
+	if (room == nullptr)
+		return ErrorCode::ROOM_NOT_FOUND;
+
+	RoomChatNotiPacket notiPacket;
+	strncpy_s(notiPacket.user, sizeof(notiPacket.user), session->GetUsername().c_str(), _TRUNCATE);
+	strncpy_s(notiPacket.message, sizeof(notiPacket.message), message, _TRUNCATE);
+
+	room->BroadCast((char*)&notiPacket, sizeof(notiPacket));
+	return ErrorCode::SUCCESS;
 }

@@ -4,7 +4,7 @@
 int main(int argc, char* argv[])
 {
 	const UINT16 SERVER_PORT = 11021;
-	const UINT16 MAX_CLIENT = 100;
+	const UINT16 MAX_CLIENT = 1000;
 
 	IOCPServer server;
 
