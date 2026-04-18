@@ -1,9 +1,10 @@
 #include "IOCPServer.h"
 
-IOCPServer::IOCPServer() 
+IOCPServer::IOCPServer()
 	: mListenSocket(INVALID_SOCKET)
 	, mIOCPHandle(nullptr)
 	, mSessionManager(nullptr)
+	, mRoomManager(nullptr)
 	, mDbManager(nullptr)
 	, mSessionIdCounter(1)
 	, mIsAcceptRun(true)
@@ -15,6 +16,9 @@ IOCPServer::~IOCPServer()
 {
 	delete mSessionManager;
 	mSessionManager = nullptr;
+
+	delete mRoomManager;
+	mRoomManager = nullptr;
 
 	delete mPacketHandler;
 	mPacketHandler = nullptr;
@@ -72,6 +76,7 @@ bool IOCPServer::BindAndListen(int bindPort)
 bool IOCPServer::StartServer(UINT32 maxClientCount)
 {
 	mSessionManager = new SessionManager(maxClientCount);
+	mRoomManager = new RoomManager(MAX_ROOM_COUNT);
 	mDbManager = new DbManager();
 
 	if (!mDbManager->Init("localhost", 33060, "root", "1234", "chat"))
@@ -163,6 +168,14 @@ bool IOCPServer::BindIOCompletionPort(ClientSession* session)
 	return true;
 }
 
+void IOCPServer::DisconnectSession(ClientSession* session)
+{
+	if (session->GetUserState() == UserState::IN_ROOM)
+		mRoomManager->LeaveRoom(session);
+
+	mSessionManager->UnregisterSession(session);
+}
+
 void IOCPServer::WorkerThread()
 {
 	DWORD transferred = 0;
@@ -195,7 +208,7 @@ void IOCPServer::WorkerThread()
 			}
 
 			if (session->TryDisconnect())
-				mSessionManager->UnregisterSession(session);
+				DisconnectSession(session);
 
 			continue;
 		}
@@ -207,17 +220,13 @@ void IOCPServer::WorkerThread()
 			session->GetRecvBuffer().Write(session->GetTempRecvBuf(), transferred);
 			session->UpdateActivity();
 
-			mPacketHandler->ProcessPacket(session); 
-			
-			if (!session->RegisterRecv())
-			{
-				cout << "[IOCP Server] RegisterRecv failed! Session: " << session->GetSessionId() << endl;
+			bool packetOk = mPacketHandler->ProcessPacket(session);
 
+			if (!packetOk || !session->RegisterRecv())
+			{
 				if (session->TryDisconnect())
-				{
-					mSessionManager->UnregisterSession(session);
-				}
-			}			
+					DisconnectSession(session);
+			}
 		}
 		else if (overlappedEx->operation == IOOperation::SEND)
 		{
@@ -245,7 +254,7 @@ void IOCPServer::AcceptThread()
 			continue;
 		}
 
-		UINT32 sessionId = GenerateSessionId();
+		uint32_t sessionId = GenerateSessionId();
 		session->Initialize(clientSocket, sessionId);
 
 		if (!BindIOCompletionPort(session))

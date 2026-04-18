@@ -45,6 +45,7 @@ private:
 
     void WorkerThread();
     void AcceptThread();
+    void DisconnectSession(ClientSession* session);
 
     bool BindIOCompletionPort(ClientSession* session);
     UINT32 GenerateSessionId() { return mSessionIdCounter++; }
