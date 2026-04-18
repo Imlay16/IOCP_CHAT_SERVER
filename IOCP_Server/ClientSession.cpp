@@ -2,8 +2,10 @@
 #include "SRWLockGuard.h"
 #include <iostream>
 
-ClientSession::ClientSession()
+ClientSession::ClientSession(uint32_t poolIndex)
 	: mSessionId(0)
+	, mPoolIndex(poolIndex)
+	, mRoomId(INVALID_ROOM_ID)
 	, mSocket(INVALID_SOCKET)
 	, mState(SessionState::IDLE)
 	, mRecvBuffer(MAX_SOCKBUF * 2)
@@ -15,15 +17,9 @@ ClientSession::ClientSession()
 	ZeroMemory(mSendBuf, sizeof(mSendBuf));
 
 	InitializeSRWLock(&mSendLock);
-	InitializeSRWLock(&mStateLock);
 }
 
-ClientSession::~ClientSession()
-{
-	Reset();
-}
-
-void ClientSession::Initialize(SOCKET socket, UINT32 sessionId)
+void ClientSession::Initialize(SOCKET socket, uint32_t sessionId)
 {
 	mSocket = socket;
 	mSessionId = sessionId;
@@ -47,10 +43,7 @@ void ClientSession::Initialize(SOCKET socket, UINT32 sessionId)
 
 void ClientSession::Reset()
 {
-	{
-		SRWLockGuard stateLock(&mStateLock); 
-		mState = SessionState::IDLE;
-	}
+	mState = SessionState::IDLE;
 
 	SRWLockGuard lock(&mSendLock);
 
@@ -61,6 +54,8 @@ void ClientSession::Reset()
 	}		
 
 	mSessionId = 0;
+	mRoomId = INVALID_ROOM_ID;
+
 	mLoginId.clear();
 	mNickname.clear();
 
@@ -74,12 +69,15 @@ void ClientSession::Reset()
 
 bool ClientSession::TryDisconnect()
 {
-	SRWLockGuard lock(&mStateLock);
-	if (mState == SessionState::DISCONNECTING || mState == SessionState::IDLE)
-		return false;
+	SessionState expected = SessionState::CONNECTED;
+	if (mState.compare_exchange_strong(expected, SessionState::DISCONNECTING))
+		return true;
 
-	mState = SessionState::DISCONNECTING;
-	return true;
+	expected = SessionState::AUTHENTICATED;
+	if (mState.compare_exchange_strong(expected, SessionState::DISCONNECTING))
+		return true;
+
+	return false;
 }
 
 bool ClientSession::SendPacket(const char* data, int length)
@@ -197,4 +195,12 @@ bool ClientSession::RegisterRecv()
 	}
 
 	return true;
+}
+
+UserInfo ClientSession::ToUserInfo() const
+{
+	UserInfo info;
+	info.userId = mSessionId;
+	strncpy_s(info.nickname, sizeof(info.nickname), mNickname.c_str(), _TRUNCATE);
+	return info;
 }
