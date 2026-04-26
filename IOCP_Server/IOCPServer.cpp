@@ -218,7 +218,6 @@ void IOCPServer::WorkerThread()
 		if (overlappedEx->operation == IOOperation::RECV)
 		{
 			session->GetRecvBuffer().Write(session->GetTempRecvBuf(), transferred);
-			session->UpdateActivity();
 
 			bool packetOk = mPacketHandler->ProcessPacket(session);
 

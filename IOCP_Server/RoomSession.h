@@ -56,14 +56,10 @@ private:
 	string mName;
 
 	uint16_t mCurPage;
-
 	uint16_t mMaxUserCount;
 
-	RoomSession* mHost;
 	vector<ClientSession*> mUsers;
 
 	atomic<RoomState> mRoomState;
-
-	SRWLOCK mSrwLock;
 };
 

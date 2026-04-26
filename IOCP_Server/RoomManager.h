@@ -30,8 +30,6 @@ private:
 	RoomSession* GetEmptyRoom();
 
 private:
-	static constexpr int PAGECOUNT = 10;
-
 	vector<std::unique_ptr<RoomSession>> mRoomContainer;
 	stack<int> mRoomIndexes;
 

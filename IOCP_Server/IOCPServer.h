@@ -13,7 +13,6 @@
 #include "DbManager.h"
 
 #define MAX_WORKERTHREAD 4
-#define KEEP_ALIVE_TIMEOUT 60
 
 using namespace std;
 
@@ -27,7 +26,6 @@ public:
     bool BindAndListen(int bindPort);
     bool StartServer(UINT32 maxClientCount);
     void StopServer();
-    void DestroyThread();
 
 private:
     SOCKET mListenSocket;

@@ -44,7 +44,7 @@ public:
 
 	// Room getters
 	uint16_t GetCurrentRoomId() const { return mCurrentRoomId; }
-	RoomInfo GetCreatedRoomInfo() const { return mCreatedRoomInfo; }
+
 	uint16_t GetRoomListCount() const { return mRoomListCount; }
 	RoomInfo GetRoomListEntry(int idx) const { return mRoomList[idx]; }
 	int GetReceivedRoomChatCount() const { return mReceivedRoomChatCount; }

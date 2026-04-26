@@ -84,14 +84,6 @@ public:
 	bool IsValid() const { return mSocket != INVALID_SOCKET; }
 	bool IsAuthenticated() const { return mState == SessionState::AUTHENTICATED; }
 
-	void UpdateActivity() { mLastActivityTime = chrono::steady_clock::now(); }
-	int GetInactiveSeconds() const
-	{
-		auto now = chrono::steady_clock::now();
-		auto elapsed = chrono::duration_cast<std::chrono::seconds>(now - mLastActivityTime);
-		return static_cast<int>(elapsed.count());
-	}
-
 	UserInfo ToUserInfo() const;
 
 private:
@@ -120,8 +112,5 @@ private:
 	queue<vector<char>> mSendQueue;
 	bool mIsSending;
 	SRWLOCK mSendLock;
-	SRWLOCK mStateLock;
-
-	chrono::steady_clock::time_point mLastActivityTime;
 };
 

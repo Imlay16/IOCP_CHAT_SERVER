@@ -4,7 +4,6 @@ RoomSession::RoomSession(uint16_t roomId)
 	: mMaxUserCount(2)
 	, mRoomId(roomId)
 	, mCurPage(0)
-	, mHost(nullptr)
 	, mRoomState(RoomState::IDLE)
 {
 	mUsers.reserve(mMaxUserCount);
