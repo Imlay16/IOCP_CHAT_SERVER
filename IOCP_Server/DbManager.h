@@ -35,6 +35,7 @@ public:
 	DbManager& operator=(const DbManager&) = delete;
 
 	bool CreateTables();
+	bool ClearTable();
 
 	bool Init(const string& host,
 			  int port,

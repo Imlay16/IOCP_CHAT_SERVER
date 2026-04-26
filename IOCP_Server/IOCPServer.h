@@ -13,7 +13,6 @@
 #include "DbManager.h"
 
 #define MAX_WORKERTHREAD 4
-#define KEEP_ALIVE_TIMEOUT 60
 
 using namespace std;
 
@@ -26,7 +25,7 @@ public:
     bool InitSocket();
     bool BindAndListen(int bindPort);
     bool StartServer(UINT32 maxClientCount);
-    void DestroyThread();
+    void StopServer();
 
 private:
     SOCKET mListenSocket;
@@ -35,15 +34,16 @@ private:
     thread mAcceptThread;
 
     SessionManager* mSessionManager;
+    RoomManager* mRoomManager;
     PacketHandler* mPacketHandler;
     DbManager* mDbManager;
 
     UINT32 mSessionIdCounter;
-    bool mIsWorkerRun;
-    bool mIsAcceptRun;
+    atomic<bool> mIsAcceptRun;
 
     void WorkerThread();
     void AcceptThread();
+    void DisconnectSession(ClientSession* session);
 
     bool BindIOCompletionPort(ClientSession* session);
     UINT32 GenerateSessionId() { return mSessionIdCounter++; }

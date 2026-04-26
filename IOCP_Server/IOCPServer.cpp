@@ -1,12 +1,12 @@
 #include "IOCPServer.h"
 
-IOCPServer::IOCPServer() 
+IOCPServer::IOCPServer()
 	: mListenSocket(INVALID_SOCKET)
 	, mIOCPHandle(nullptr)
 	, mSessionManager(nullptr)
+	, mRoomManager(nullptr)
 	, mDbManager(nullptr)
 	, mSessionIdCounter(1)
-	, mIsWorkerRun(true)
 	, mIsAcceptRun(true)
 {
 	mPacketHandler = new PacketHandler();
@@ -14,10 +14,11 @@ IOCPServer::IOCPServer()
 
 IOCPServer::~IOCPServer()
 {
-	DestroyThread();
-
 	delete mSessionManager;
 	mSessionManager = nullptr;
+
+	delete mRoomManager;
+	mRoomManager = nullptr;
 
 	delete mPacketHandler;
 	mPacketHandler = nullptr;
@@ -75,9 +76,10 @@ bool IOCPServer::BindAndListen(int bindPort)
 bool IOCPServer::StartServer(UINT32 maxClientCount)
 {
 	mSessionManager = new SessionManager(maxClientCount);
+	mRoomManager = new RoomManager(MAX_ROOM_COUNT);
 	mDbManager = new DbManager();
 
-	if (!mDbManager->Init("127.0.0.1", 33060, "root", "1234", "chat"))
+	if (!mDbManager->Init("localhost", 33060, "root", "1234", "chat"))
 	{
 		cout << "[IOCPServer] DbManager Init failed" << endl;
 		return false;
@@ -89,7 +91,14 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 		return false;
 	}
 
+	if (!mDbManager->ClearTable())
+	{
+		cout << "[IOCPServer] DbManager ClearTable failed" << endl;
+		return false;
+	}
+
 	mPacketHandler->SetSessionManager(mSessionManager);
+	mPacketHandler->SetRoomManager(mRoomManager);
 	mPacketHandler->SetDbManager(mDbManager);
 
 	mIOCPHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, MAX_WORKERTHREAD);
@@ -110,14 +119,16 @@ bool IOCPServer::StartServer(UINT32 maxClientCount)
 	return true;
 }
 
-void IOCPServer::DestroyThread()
+void IOCPServer::StopServer()
 {
-	mIsWorkerRun = false;
+	mIsAcceptRun = false;
+	closesocket(mListenSocket);
+	if (mAcceptThread.joinable())
+		mAcceptThread.join();
 
-	if (mIOCPHandle != nullptr)
+	for (int i = 0; i < mIOWorkerThreads.size(); ++i)
 	{
-		CloseHandle(mIOCPHandle);
-		mIOCPHandle = nullptr;
+		PostQueuedCompletionStatus(mIOCPHandle, 0, 0, nullptr);
 	}
 
 	for (auto& thread : mIOWorkerThreads)
@@ -128,17 +139,15 @@ void IOCPServer::DestroyThread()
 		}
 	}
 
-	mIsAcceptRun = false;
-	if (mListenSocket != INVALID_SOCKET)
+	mSessionManager->CloseAllSessions();
+
+	if (mIOCPHandle != nullptr)
 	{
-		closesocket(mListenSocket);
+		CloseHandle(mIOCPHandle);
+		mIOCPHandle = nullptr;
 	}
 
-	if (mAcceptThread.joinable()) {
-		mAcceptThread.join();
-	}
-
-	cout << "[IOCPServer] All threads destroyed" << endl;
+	cout << "[IOCPServer] Stop Server..." << endl;
 }
 
 bool IOCPServer::BindIOCompletionPort(ClientSession* session)
@@ -159,13 +168,21 @@ bool IOCPServer::BindIOCompletionPort(ClientSession* session)
 	return true;
 }
 
+void IOCPServer::DisconnectSession(ClientSession* session)
+{
+	if (session->GetUserState() == UserState::IN_ROOM)
+		mRoomManager->LeaveRoom(session);
+
+	mSessionManager->UnregisterSession(session);
+}
+
 void IOCPServer::WorkerThread()
 {
 	DWORD transferred = 0;
 	ClientSession* session = nullptr;
 	LPOVERLAPPED overlapped = nullptr;
 
-	while (mIsWorkerRun)
+	while (true)
 	{
 		BOOL success = GetQueuedCompletionStatus(
 			mIOCPHandle,
@@ -175,23 +192,23 @@ void IOCPServer::WorkerThread()
 			INFINITE
 		);
 
+		if (overlapped == nullptr)
+			break;
+
 		if (!success || transferred == 0)
 		{
-			if (!success)
+			DWORD err = GetLastError();
+
+			if (!success &&
+				err != ERROR_OPERATION_ABORTED &&
+				err != ERROR_CONNECTION_ABORTED &&
+				err != ERROR_NETNAME_DELETED)
 			{
-				DWORD err = GetLastError();
-				cout << "Abnormal Disconnect (Error: " << err << ")" << endl;
-			}
-			else
-			{
-				cout << "Normal Disconnect (FIN received)" << endl;
+				cout << "[IOCP Server] Abnormal Disconnect (Error: " << err << ")\n";
 			}
 
-			if (session->IsValid())
-			{
-				cout << "[IOCPServer] Client disconnected. Session ID: " << session->GetSessionId() << endl;
-				mSessionManager->UnregisterSession(session);
-			}
+			if (session->TryDisconnect())
+				DisconnectSession(session);
 
 			continue;
 		}
@@ -201,16 +218,14 @@ void IOCPServer::WorkerThread()
 		if (overlappedEx->operation == IOOperation::RECV)
 		{
 			session->GetRecvBuffer().Write(session->GetTempRecvBuf(), transferred);
-			session->UpdateActivity();
 
-			mPacketHandler->ProcessPacket(session); 
-			
-			if (!session->RegisterRecv())
+			bool packetOk = mPacketHandler->ProcessPacket(session);
+
+			if (!packetOk || !session->RegisterRecv())
 			{
-				cout << "[IOCP Server] RegisterRecv failed! Session: " << session->GetSessionId() << endl;
-
-				mSessionManager->UnregisterSession(session);
-			}			
+				if (session->TryDisconnect())
+					DisconnectSession(session);
+			}
 		}
 		else if (overlappedEx->operation == IOOperation::SEND)
 		{
@@ -226,20 +241,19 @@ void IOCPServer::AcceptThread()
 
 	while (mIsAcceptRun)
 	{
+		SOCKET clientSocket = ::accept(mListenSocket, (SOCKADDR*)&clientAddr, &addrLen);
+		if (clientSocket == INVALID_SOCKET)
+			continue;
+
 		ClientSession* session = mSessionManager->GetEmptySession();
 		if (session == nullptr)
 		{
-			cout << "[IOCPServer] Client pool is full" << endl;			
+			cout << "[IOCPServer] Client pool is full." << endl;
+			::closesocket(clientSocket);
 			continue;
 		}
 
-		SOCKET clientSocket = ::accept(mListenSocket, (SOCKADDR*)&clientAddr, &addrLen);
-		if (clientSocket == INVALID_SOCKET)
-		{
-			continue;
-		}
-
-		UINT32 sessionId = GenerateSessionId();
+		uint32_t sessionId = GenerateSessionId();
 		session->Initialize(clientSocket, sessionId);
 
 		if (!BindIOCompletionPort(session))
@@ -256,8 +270,5 @@ void IOCPServer::AcceptThread()
 
 		char clientIP[32] = { 0 };
 		inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, sizeof(clientIP) - 1);
-		cout << "[IOCPServer] Client connected - Session ID: " << sessionId
-			<< ", IP: " << clientIP
-			<< ", Socket: " << clientSocket << std::endl;
 	}
 }

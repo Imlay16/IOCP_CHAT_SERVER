@@ -28,7 +28,7 @@ bool TestClient::Connect()
 		cout << "[" << mName << "] Failed to create socket" << endl;
 		return false;
 	}
-	
+
 	SOCKADDR_IN serverAddr;
 	ZeroMemory(&serverAddr, sizeof(serverAddr));
 	serverAddr.sin_family = AF_INET;
@@ -44,10 +44,8 @@ bool TestClient::Connect()
 	}
 
 	mIsRunning = true;
-
 	mRecvThread = (HANDLE)_beginthreadex(nullptr, 0, RecvThreadFunc, this, 0, nullptr);
 
-	cout << "[" << mName << "] Connected to server" << endl;
 	return true;
 }
 
@@ -80,7 +78,7 @@ bool TestClient::SendAll(SOCKET sock, const char* data, int totalSize)
 		if (ret == SOCKET_ERROR || ret == 0)
 		{
 			return false;
-		}			
+		}
 
 		sent += ret;
 	}
@@ -101,11 +99,10 @@ bool TestClient::Register(int num)
 
 	if (!SendAll(mSocket, (const char*)&packet, packet.size))
 	{
-		cout << "[Client " << num << "] Register send error :" << WSAGetLastError() << endl;
+		cout << "[Client " << num << "] Register send error: " << WSAGetLastError() << endl;
 		return false;
 	}
 
-	// È¸¿ø°¡ÀÔ ÀÀ´ä ´ë±â
 	for (int i = 0; i < 300 && !mRegisterResponseArrived && mIsRunning; i++)
 	{
 		Sleep(10);
@@ -113,12 +110,12 @@ bool TestClient::Register(int num)
 
 	if (!mRegisterResponseArrived)
 	{
-		cout << "[Client" << num << "] Register response timeout" << endl;
+		cout << "[Client " << num << "] Register response timeout" << endl;
 		return false;
 	}
 
 	return (mRegisterResult == ErrorCode::SUCCESS ||
-			mRegisterResult == ErrorCode::ID_ALREADY_EXISTS);
+		mRegisterResult == ErrorCode::ID_ALREADY_EXISTS);
 }
 
 bool TestClient::Login(int num)
@@ -136,7 +133,6 @@ bool TestClient::Login(int num)
 		return false;
 	}
 
-	// ·Î±×ÀÎ ÀÀ´ä ´ë±â (ÃÖ´ë 3ÃÊ)
 	for (int i = 0; i < 300 && !mIsAuthenticated && mIsRunning; i++)
 	{
 		Sleep(10);
@@ -145,59 +141,144 @@ bool TestClient::Login(int num)
 	return mIsAuthenticated;
 }
 
-bool TestClient::SendBroadcast(const string& message)
+bool TestClient::SendLobbyChat(const string& message)
 {
 	if (!mIsAuthenticated)
-	{
-		cout << "[" << mName << "] Not authenticated" << endl;
 		return false;
-	}
 
-	BroadcastReqPacket packet;
-	packet.SetMessage(message.c_str());
+	LobbyChatReqPacket packet;
+	packet.SetMessage(message);
 
-	if (!SendAll(mSocket, (const char*)&packet, packet.size))
-	{
-		cout << "[" << mName << "] Broadcast send error: " << WSAGetLastError() << endl;
-		return false;
-	}
-
-	return true;
+	return SendAll(mSocket, (const char*)&packet, packet.size);
 }
 
 bool TestClient::SendWhisper(int targetId, const string& message)
 {
 	if (!mIsAuthenticated)
-	{
-		cout << "[" << mName << "] Not authenticated" << endl;
 		return false;
-	}
 
-	string id = "LoginId" + to_string(targetId);
+	string nickname = "bot_" + to_string(targetId);
 
 	WhisperChatReqPacket packet;
-	packet.SetWhisper(id.c_str(), message.c_str());
+	packet.SetWhisper(nickname.c_str(), message.c_str());
 
-	if (!SendAll(mSocket, (const char*)&packet, packet.size))
-	{
-		cout << "[" << mName << "] Whisper send error: " << WSAGetLastError() << endl;
-		return false;
-	}
-
-	return true;
+	return SendAll(mSocket, (const char*)&packet, packet.size);
 }
 
-bool TestClient::SendHeartbeat()
+
+bool TestClient::CreateRoom(const string& name, uint16_t maxUser)
 {
-	HeartbeatPacket packet;
+	if (!mIsAuthenticated)
+		return false;
+
+	mCreateRoomArrived = false;
+	mCreateRoomResult = ErrorCode::SERVER_ERROR;
+
+	CreateRoomReqPacket packet;
+	packet.SetRoomInfo(name, maxUser);
 
 	if (!SendAll(mSocket, (const char*)&packet, packet.size))
+		return false;
+
+	for (int i = 0; i < 300 && !mCreateRoomArrived && mIsRunning; i++)
+		Sleep(10);
+
+	if (!mCreateRoomArrived)
 	{
-		cout << "[" << mName << "] Heartbeat send error: " << WSAGetLastError() << endl;
+		cout << "[" << mName << "] CreateRoom response timeout" << endl;
 		return false;
 	}
 
-	return true;
+	return mCreateRoomResult == ErrorCode::SUCCESS;
+}
+
+bool TestClient::RequestRoomList(uint16_t page)
+{
+	if (!mIsAuthenticated)
+		return false;
+
+	mRoomListArrived = false;
+	mRoomListResult  = ErrorCode::SERVER_ERROR;
+	mRoomListCount   = 0;
+
+	RoomListReqPacket packet;
+	packet.SetPage(page);
+
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
+		return false;
+
+	for (int i = 0; i < 300 && !mRoomListArrived && mIsRunning; i++)
+		Sleep(10);
+
+	if (!mRoomListArrived)
+	{
+		cout << "[" << mName << "] RoomList response timeout" << endl;
+		return false;
+	}
+
+	return mRoomListResult == ErrorCode::SUCCESS;
+}
+
+bool TestClient::JoinRoom(uint16_t roomId)
+{
+	if (!mIsAuthenticated)
+		return false;
+
+	mJoinRoomArrived = false;
+	mJoinRoomResult = ErrorCode::SERVER_ERROR;
+
+	JoinRoomReqPacket packet;
+	packet.JoinRoom(roomId);
+
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
+		return false;
+
+	for (int i = 0; i < 300 && !mJoinRoomArrived && mIsRunning; i++)
+		Sleep(10);
+
+	if (!mJoinRoomArrived)
+	{
+		cout << "[" << mName << "] JoinRoom response timeout" << endl;
+		return false;
+	}
+
+	return mJoinRoomResult == ErrorCode::SUCCESS;
+}
+
+bool TestClient::LeaveRoom()
+{
+	if (!mIsAuthenticated)
+		return false;
+
+	mLeaveRoomArrived = false;
+	mLeaveRoomResult = ErrorCode::SERVER_ERROR;
+
+	LeaveRoomReqPacket packet;
+
+	if (!SendAll(mSocket, (const char*)&packet, packet.size))
+		return false;
+
+	for (int i = 0; i < 300 && !mLeaveRoomArrived && mIsRunning; i++)
+		Sleep(10);
+
+	if (!mLeaveRoomArrived)
+	{
+		cout << "[" << mName << "] LeaveRoom response timeout" << endl;
+		return false;
+	}
+
+	return mLeaveRoomResult == ErrorCode::SUCCESS;
+}
+
+bool TestClient::SendRoomChat(const string& message)
+{
+	if (!mIsAuthenticated || mCurrentRoomId == INVALID_ROOM_ID)
+		return false;
+
+	RoomChatReqPacket packet;
+	packet.SetMessage(message);
+
+	return SendAll(mSocket, (const char*)&packet, packet.size);
 }
 
 unsigned WINAPI TestClient::RecvThreadFunc(void* arg)
@@ -219,11 +300,6 @@ void TestClient::RecvLoop()
 			int recvSize = recv(mSocket, mRecvBuffer + totalRecv, sizeof(PacketHeader) - totalRecv, 0);
 			if (recvSize <= 0)
 			{
-				if (recvSize == 0)
-				{
-					cout << "[" << mName << "] Server disconnected" << endl;
-				}
-
 				mIsRunning = false;
 				return;
 			}
@@ -261,36 +337,42 @@ void TestClient::ProcessPacket(PacketHeader* packet)
 	case PacketType::LOGIN_RESPONSE:
 		HandleLoginResponse((LoginResPacket*)packet);
 		break;
-	case PacketType::BROADCAST_RESPONSE:
-		HandleBroadcastResponse((BroadcastResPacket*)packet);
+	case PacketType::LOBBY_CHAT_RESPONSE:
+		HandleLobbyChatResponse((LobbyChatResPacket*)packet);
+		break;
+	case PacketType::LOBBY_CHAT_NOTIFY:
+		HandleLobbyChatNoti((LobbyChatNotiPacket*)packet);
 		break;
 	case PacketType::WHISPER_RESPONSE:
 		HandleWhisperResponse((WhisperChatResPacket*)packet);
 		break;
-	case PacketType::HEART_BEAT:
-		HandleHeartbeat();
+	case PacketType::CREATE_ROOM_RESPONSE:
+		HandleCreateRoomResponse((CreateRoomResPacket*)packet);
 		break;
-
+	case PacketType::ROOM_LIST_RESPONSE:
+		HandleRoomListResponse((RoomListResPacket*)packet);
+		break;
+	case PacketType::JOIN_ROOM_RESPONSE:
+		HandleJoinRoomResponse((JoinRoomResPacket*)packet);
+		break;
+	case PacketType::LEAVE_ROOM_RESPONSE:
+		HandleLeaveRoomResponse((LeaveRoomResPacket*)packet);
+		break;
+	case PacketType::ROOM_CHAT_RESPONSE:
+		HandleRoomChatResponse((RoomChatResPacket*)packet);
+		break;
+	case PacketType::ROOM_CHAT_NOTIFY:
+		HandleRoomChatNoti((RoomChatNotiPacket*)packet);
+		break;
 	default:
-		cout << "[" << mName << "] Unknown packet type" << endl;
 		break;
 	}
 }
 
 void TestClient::HandleRegisterResponse(RegisterResPacket* packet)
 {
+	mRegisterResult = packet->result;
 	mRegisterResponseArrived = true;
-
-	if (packet->result == ErrorCode::SUCCESS)
-	{
-		mRegisterResult = ErrorCode::SUCCESS;
-		cout << "[" << mId << "] Register successful" << endl;
-	}
-	else
-	{
-		cout << "[" << mId << "] Register failed" << endl;
-		mIsRunning = false;
-	}
 }
 
 void TestClient::HandleLoginResponse(LoginResPacket* packet)
@@ -299,36 +381,80 @@ void TestClient::HandleLoginResponse(LoginResPacket* packet)
 	{
 		mIsAuthenticated = true;
 		mName = packet->nickname;
-		cout << "[" << mName << "] Login successful" << endl;
 	}
 	else
 	{
-		cout << "[" << mName << "] Login failed" << endl;
 		mIsRunning = false;
 	}
 }
 
-void TestClient::HandleBroadcastResponse(BroadcastResPacket* packet)
+void TestClient::HandleLobbyChatResponse(LobbyChatResPacket* packet)
 {
-	mReceivedBroadcastCount++;
-	cout << "[BROADCAST][" << packet->user << "]: " << packet->message << endl;
+	// ì‘ë‹µ ìˆ˜ì‹  (í•„ìš”ì‹œ ì¹´ìš´íŠ¸)
+}
+
+void TestClient::HandleLobbyChatNoti(LobbyChatNotiPacket* packet)
+{
+	mReceivedLobbyChatCount++;
 }
 
 void TestClient::HandleWhisperResponse(WhisperChatResPacket* packet)
 {
 	if (packet->result == ErrorCode::SUCCESS)
 	{
-		cout << "[WHISPER][" << packet->sender << " -> " << mName << "]: " << packet->message << endl;
- 	}
-	else
-	{
-		cout << "[" << mName << "] Whisper failed: " << packet->message << endl;
+		mReceivedWhisperCount++;
 	}
 }
 
-void TestClient::HandleHeartbeat()
-{
-	cout << "[HEARTBEAT] Receiving Heartbeat from Server... " << endl;
 
-	SendHeartbeat();
+void TestClient::HandleCreateRoomResponse(CreateRoomResPacket* packet)
+{
+	mCreateRoomResult = packet->result;
+	if (packet->result == ErrorCode::SUCCESS)
+	{
+		mCreatedRoomInfo = packet->room;
+		mCurrentRoomId = packet->room.roomId;
+	}
+	mCreateRoomArrived = true;
+}
+
+void TestClient::HandleRoomListResponse(RoomListResPacket* packet)
+{
+	mRoomListResult = packet->result;
+	if (packet->result == ErrorCode::SUCCESS)
+	{
+		mRoomListCount = packet->roomCount;
+		memcpy_s(mRoomList, sizeof(mRoomList), packet->rooms, sizeof(RoomInfo) * packet->roomCount);
+	}
+	mRoomListArrived = true;
+}
+
+void TestClient::HandleJoinRoomResponse(JoinRoomResPacket* packet)
+{
+	mJoinRoomResult = packet->result;
+	if (packet->result == ErrorCode::SUCCESS)
+	{
+		mCurrentRoomId = packet->room.roomId;
+	}
+	mJoinRoomArrived = true;
+}
+
+void TestClient::HandleLeaveRoomResponse(LeaveRoomResPacket* packet)
+{
+	mLeaveRoomResult = packet->result;
+	if (packet->result == ErrorCode::SUCCESS)
+	{
+		mCurrentRoomId = INVALID_ROOM_ID;
+	}
+	mLeaveRoomArrived = true;
+}
+
+void TestClient::HandleRoomChatResponse(RoomChatResPacket* packet)
+{
+	// ì‘ë‹µ ìˆ˜ì‹ 
+}
+
+void TestClient::HandleRoomChatNoti(RoomChatNotiPacket* packet)
+{
+	mReceivedRoomChatCount++;
 }

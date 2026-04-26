@@ -1,12 +1,9 @@
-#pragma once
-
 #include "PacketHandler.h"
 #include <iostream>
-#include <random>
 
 using namespace std;
 
-void PacketHandler::ProcessPacket(ClientSession* session)
+bool PacketHandler::ProcessPacket(ClientSession* session)
 {
 	RingBuffer& recvBuffer = session->GetRecvBuffer();
 
@@ -28,12 +25,10 @@ void PacketHandler::ProcessPacket(ClientSession* session)
 			break;
 		}
 
-		// 만약 패킷이 최대 크기를 넘는다면,
 		if (packetSize > MAX_PACKET_SIZE)
-		{
-			// 세션 정리하고 반납하기
-			mSessionManager->UnregisterSession(session);
-			break;
+		{		
+			//mSessionManager->UnregisterSession(session);
+			return false;
 		}
 
 		vector<char> packetBuffer(packetSize);
@@ -41,48 +36,44 @@ void PacketHandler::ProcessPacket(ClientSession* session)
 
 		PacketHeader* fullHeader = (PacketHeader*)packetBuffer.data();
 
+		auto requireAuth = [&]() -> bool {
+			if (session->IsAuthenticated()) return true;
+			cout << "[PacketHandler] Session " << session->GetSessionId()
+				<< " not authenticated. Packet ignored." << endl;
+			return false;
+		};
+
 		switch (header.GetType())
 		{
-		case PacketType::REGISTER_REQUEST:
-			HandleRegister(session, fullHeader);
-			break;
-		case PacketType::LOGIN_REQUEST:
-			HandleLogin(session, fullHeader);
-			break;
+		case PacketType::REGISTER_REQUEST:    HandleRegister(session, fullHeader);                      break;
+		case PacketType::LOGIN_REQUEST:       HandleLogin(session, fullHeader);                         break;
 
-		case PacketType::BROADCAST_REQUEST:
-		case PacketType::WHISPER_REQUEST:
-			if (session->IsAuthenticated())
-			{
-				if (fullHeader->GetType() == PacketType::BROADCAST_REQUEST)
-				{
-					HandleBroadcast(session, fullHeader);
-				}
-				else
-				{
-					HandleWhisper(session, fullHeader);
-				}
-			}
-			else
-			{
-				cout << "[PacketHandler] Session " << session->GetSessionId() << " not authenticated. Packet ignored." << endl;
-			}
-			break;
+		case PacketType::LOBBY_CHAT_REQUEST:  if (requireAuth()) HandleLobbyChat(session, fullHeader);  break;
+		case PacketType::WHISPER_REQUEST:     if (requireAuth()) HandleWhisper(session, fullHeader);    break;
+		case PacketType::CREATE_ROOM_REQUEST: if (requireAuth()) HandleCreateRoom(session, fullHeader); break;
+		case PacketType::ROOM_LIST_REQUEST:   if (requireAuth()) HandleRoomList(session, fullHeader);   break;
+		case PacketType::JOIN_ROOM_REQUEST:   if (requireAuth()) HandleJoinRoom(session, fullHeader);   break;
+		case PacketType::LEAVE_ROOM_REQUEST:  if (requireAuth()) HandleLeaveRoom(session, fullHeader);  break;
+		case PacketType::ROOM_CHAT_REQUEST:   if (requireAuth()) HandleRoomChat(session, fullHeader);   break;
 
-		default:
-			cout << "[PacketHandler] Unknown packet type" << endl;
-			break;
+		default: cout << "[PacketHandler] Unknown packet type" << endl; break;
 		}
 
 		recvBuffer.Consume(packetSize);
 
 		// cout << "[PacketHandler] Packet processed. Remaining: " << recvBuffer.GetDataSize() << " bytes" << endl;
 	}
+	return true;
 }
 
 void PacketHandler::SetSessionManager(SessionManager* sessionManager)
 {
 	mSessionManager = sessionManager;
+}
+
+void PacketHandler::SetRoomManager(RoomManager* roomManager)
+{
+	mRoomManager = roomManager;
 }
 
 void PacketHandler::SetDbManager(DbManager* dbManager)
@@ -113,18 +104,11 @@ void PacketHandler::HandleRegister(ClientSession* session, PacketHeader* header)
 	RegisterReqPacket* packet = (RegisterReqPacket*)header;
 	RegisterResPacket resPacket;	
 
-	// MySql Connector를 이용해서 회원 등록. 아이디 중복 가입 금지
-
-	//string loginId(packet->loginId);
-	//string password(packet->password);
-	//string nickname(packet->nickname);
-
 	string loginId(packet->loginId, strnlen_s(packet->loginId, sizeof(packet->loginId)));
 	string password(packet->password, strnlen_s(packet->password, sizeof(packet->password)));
 	string nickname(packet->nickname, strnlen_s(packet->nickname, sizeof(packet->nickname)));
 
 
-	// Hash 적용
 	// string passwordHash = Hash(password);
 	string passwordHash = password;
 
@@ -187,27 +171,22 @@ void PacketHandler::HandleLogin(ClientSession* session, PacketHeader* header)
 	resPacket.result = ErrorCode::SUCCESS;
 	strcpy_s(resPacket.nickname, sizeof(resPacket.nickname), user.nickname.c_str());
 
-	cout << "[PacketHandler] Login success: " << loginId
-		<< ", nickname = " << user.nickname << endl;
-
 	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
 
-void PacketHandler::HandleBroadcast(ClientSession* session, PacketHeader* header)
+void PacketHandler::HandleLobbyChat(ClientSession* session, PacketHeader* header)
 {
-	if (header->GetSize() != sizeof(BroadcastReqPacket))
+	if (header->GetSize() != sizeof(LobbyChatReqPacket))
 	{
 		cout << "[PacketHandler] Broadcast packet size error" << endl;
 		return;
 	}
 
-	BroadcastReqPacket* packet = (BroadcastReqPacket*)header;
+	auto* packet = reinterpret_cast<LobbyChatReqPacket*>(header);
 
-	BroadcastResPacket resPacket;
-	resPacket.SetUser(session->GetUsername().c_str());
-	resPacket.SetMessage(packet->message);
-
-	mSessionManager->BroadcastPacket(session, (char*)&resPacket, sizeof(resPacket));
+	LobbyChatResPacket resPacket;
+	resPacket.result = mSessionManager->LobbyChat(session, packet->message);
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
 }
 
 void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header)
@@ -218,24 +197,125 @@ void PacketHandler::HandleWhisper(ClientSession* session, PacketHeader* header)
 		return;
 	}
 
-	WhisperChatReqPacket* packet = (WhisperChatReqPacket*)header;
-	string receiver = packet->GetReceiver();
-
-	ClientSession* targetSession = mSessionManager->FindSessionByLoginId(receiver);
+	auto* packet = reinterpret_cast<WhisperChatReqPacket*>(header);
 
 	WhisperChatResPacket resPacket;
+	resPacket.result = mSessionManager->WhisperChat(session, packet->receiver, packet->message);
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
+}
 
-	if (targetSession != nullptr)
+void PacketHandler::HandleCreateRoom(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(CreateRoomReqPacket))
 	{
+		cout << "[PacketHandler] CreateRoom packet size error" << endl;
+		return;
+	}
+
+	CreateRoomReqPacket* packet = (CreateRoomReqPacket*)header;
+
+	CreateRoomResPacket resPacket;
+
+	auto result = mRoomManager->CreateRoomSession(session, packet->roomName, packet->maxUser);
+	if (result.has_value())
+	{
+		resPacket.room = result.value();
 		resPacket.result = ErrorCode::SUCCESS;
-		resPacket.SetMessage(session->GetUsername().c_str(), packet->GetMsg());
-		targetSession->SendPacket((char*)&resPacket, sizeof(resPacket));
 	}
 	else
 	{
-		resPacket.result = ErrorCode::USER_NOT_FOUND;
-		snprintf(resPacket.message, sizeof(resPacket.message),
-			"User '%s' not found", packet->receiver);
-		session->SendPacket((char*)&resPacket, sizeof(resPacket));
+		resPacket.result = ErrorCode::ROOM_CREATION_FAIL;
 	}
+
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
+}
+
+void PacketHandler::HandleRoomList(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(RoomListReqPacket))
+	{
+		cout << "[PacketHandler] RoomList packet size error" << endl;
+		return;
+	}
+
+	RoomListReqPacket* packet = (RoomListReqPacket*)header;
+
+	RoomListResPacket resPacket;
+
+	auto result = mRoomManager->GetRoomListByPage(packet->page);
+
+	if (result.has_value())
+	{
+		resPacket.result = ErrorCode::SUCCESS;
+		resPacket.roomCount = static_cast<uint16_t>(result->size());
+		memcpy_s(resPacket.rooms, sizeof(resPacket.rooms), result->data(), result->size() * sizeof(RoomInfo));
+	}
+	else
+	{
+		resPacket.result = ErrorCode::INVALID_ROOM_REQUEST;
+	}
+
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
+}
+
+void PacketHandler::HandleJoinRoom(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(JoinRoomReqPacket))
+	{
+		cout << "[PacketHandler] JoinRoom packet size error" << endl;
+		return;
+	}
+
+	auto* packet = reinterpret_cast<JoinRoomReqPacket*>(header);
+
+	JoinRoomResPacket resPacket;
+
+	auto [result, room] = mRoomManager->JoinRoom(session, packet->roomId);
+
+	resPacket.result = result;
+
+	if (result == ErrorCode::SUCCESS)
+	{
+		resPacket.room = room->ToRoomInfo();
+		room->FillUserList(resPacket.users, MAX_ROOM_USER);
+	}
+
+	session->SendPacket((char*)&resPacket, sizeof(JoinRoomResPacket));
+}
+
+void PacketHandler::HandleLeaveRoom(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(LeaveRoomReqPacket))
+	{
+		cout << "[PacketHandler] LeaveRoom packet size error" << endl;
+		return;
+	}
+
+	auto* packet = reinterpret_cast<LeaveRoomReqPacket*>(header);
+
+	auto result = mRoomManager->LeaveRoom(session);
+
+	LeaveRoomResPacket resPacket;
+
+	resPacket.result = result;
+	session->SendPacket((char*)&resPacket, sizeof(resPacket));
+}
+
+void PacketHandler::HandleRoomChat(ClientSession* session, PacketHeader* header)
+{
+	if (header->GetSize() != sizeof(RoomChatReqPacket))
+	{
+		cout << "[PacketHandler] RoomChat packet size error" << endl;
+		return;
+	}
+
+	if (session->GetUserState() != UserState::IN_ROOM)
+		return;
+
+	RoomChatResPacket resPacket;
+
+	auto* packet = reinterpret_cast<RoomChatReqPacket*>(header);
+	resPacket.result = mRoomManager->RoomChat(session, packet->message);
+
+	session->SendPacket((char*)&resPacket, sizeof(RoomChatResPacket));
 }
