@@ -24,11 +24,10 @@ void ClientSession::Initialize(SOCKET socket, uint32_t sessionId)
 	mSocket = socket;
 	mSessionId = sessionId;
 	mState = SessionState::CONNECTED;
+	mUserState = UserState::LOBBY;
 	mIsSending = false;
 	mLoginId.clear();
 	mNickname.clear();
-
-	mLastActivityTime = chrono::steady_clock::now();
 
 	while (!mSendQueue.empty())
 	{
@@ -44,6 +43,7 @@ void ClientSession::Initialize(SOCKET socket, uint32_t sessionId)
 void ClientSession::Reset()
 {
 	mState = SessionState::IDLE;
+	mUserState = UserState::LOBBY;
 
 	SRWLockGuard lock(&mSendLock);
 

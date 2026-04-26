@@ -1,8 +1,5 @@
-#pragma once
-
 #include "PacketHandler.h"
 #include <iostream>
-#include <random>
 
 using namespace std;
 
@@ -39,45 +36,27 @@ bool PacketHandler::ProcessPacket(ClientSession* session)
 
 		PacketHeader* fullHeader = (PacketHeader*)packetBuffer.data();
 
+		auto requireAuth = [&]() -> bool {
+			if (session->IsAuthenticated()) return true;
+			cout << "[PacketHandler] Session " << session->GetSessionId()
+				<< " not authenticated. Packet ignored." << endl;
+			return false;
+		};
+
 		switch (header.GetType())
 		{
-		case PacketType::REGISTER_REQUEST:
-			HandleRegister(session, fullHeader);
-			break;
-		case PacketType::LOGIN_REQUEST:
-			HandleLogin(session, fullHeader);
-			break;
+		case PacketType::REGISTER_REQUEST:    HandleRegister(session, fullHeader);                      break;
+		case PacketType::LOGIN_REQUEST:       HandleLogin(session, fullHeader);                         break;
 
-		case PacketType::LOBBY_CHAT_REQUEST:
-		case PacketType::WHISPER_REQUEST:
-		case PacketType::CREATE_ROOM_REQUEST:
-		case PacketType::ROOM_LIST_REQUEST:
-		case PacketType::JOIN_ROOM_REQUEST:
-		case PacketType::LEAVE_ROOM_REQUEST:
-		case PacketType::ROOM_CHAT_REQUEST:
-			if (session->IsAuthenticated())
-			{
-				switch (fullHeader->GetType())
-				{
-				case PacketType::LOBBY_CHAT_REQUEST:  HandleLobbyChat(session, fullHeader);  break;
-				case PacketType::WHISPER_REQUEST:     HandleWhisper(session, fullHeader);     break;
-				case PacketType::CREATE_ROOM_REQUEST: HandleCreateRoom(session, fullHeader);  break;
-				case PacketType::ROOM_LIST_REQUEST:   HandleRoomList(session, fullHeader);    break;
-				case PacketType::JOIN_ROOM_REQUEST:   HandleJoinRoom(session, fullHeader);    break;
-				case PacketType::LEAVE_ROOM_REQUEST:  HandleLeaveRoom(session, fullHeader);   break;
-				case PacketType::ROOM_CHAT_REQUEST:   HandleRoomChat(session, fullHeader);    break;
-				default: break;
-				}
-			}
-			else
-			{
-				cout << "[PacketHandler] Session " << session->GetSessionId() << " not authenticated. Packet ignored." << endl;
-			}
-			break;
+		case PacketType::LOBBY_CHAT_REQUEST:  if (requireAuth()) HandleLobbyChat(session, fullHeader);  break;
+		case PacketType::WHISPER_REQUEST:     if (requireAuth()) HandleWhisper(session, fullHeader);    break;
+		case PacketType::CREATE_ROOM_REQUEST: if (requireAuth()) HandleCreateRoom(session, fullHeader); break;
+		case PacketType::ROOM_LIST_REQUEST:   if (requireAuth()) HandleRoomList(session, fullHeader);   break;
+		case PacketType::JOIN_ROOM_REQUEST:   if (requireAuth()) HandleJoinRoom(session, fullHeader);   break;
+		case PacketType::LEAVE_ROOM_REQUEST:  if (requireAuth()) HandleLeaveRoom(session, fullHeader);  break;
+		case PacketType::ROOM_CHAT_REQUEST:   if (requireAuth()) HandleRoomChat(session, fullHeader);   break;
 
-		default:
-			cout << "[PacketHandler] Unknown packet type" << endl;
-			break;
+		default: cout << "[PacketHandler] Unknown packet type" << endl; break;
 		}
 
 		recvBuffer.Consume(packetSize);
