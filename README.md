@@ -368,7 +368,7 @@ ErrorCode RoomManager::JoinRoom(ClientSession* session, uint16_t roomId) {
 - 패킷 압축 및 암호화 (TLS)
 - 비밀번호 해싱 강화
 - 하트비트 / 타임아웃 처리
-- 채팅 로그 영속화 (방별 메시지 히스토리)
+- 로깅 시스템
 - 부하 테스트 및 성능 측정
 
 <br>
